@@ -1,19 +1,24 @@
 import {
   BlobStored,
+  ChangeRow,
   CommitResponse,
   CreateUploadResponse,
+  DeviceInfo,
   EnrollResponse,
   parseData,
   PlanResponse,
+  SnapshotInfo,
+  TreeResponse,
   UploadedPart,
   VaultStatus,
   type CommitRequest,
   type CompleteUploadRequest,
+  type DeviceId,
   type EnrollRequest,
   type PlanRequest,
   type VaultId,
 } from "@vault-sync/protocol";
-import type { z } from "zod";
+import { z } from "zod";
 
 import { HTTP_BASE_DELAY_MS, HTTP_MAX_ATTEMPTS } from "../common/constants.ts";
 import { ApiError } from "../common/errors.ts";
@@ -39,7 +44,8 @@ export async function withRetry<T>(run: () => Promise<T>): Promise<T> {
       return await run();
     } catch (error) {
       if (!(error instanceof ApiError) || !error.retryable || attempt >= HTTP_MAX_ATTEMPTS) throw error;
-      await delay(HTTP_BASE_DELAY_MS * 2 ** (attempt - 1) * (0.5 + Math.random()));
+      const backoff = HTTP_BASE_DELAY_MS * 2 ** (attempt - 1) * (0.5 + Math.random());
+      await delay(Math.max(backoff, error.retryAfterMs));
     }
   }
 }
@@ -77,6 +83,42 @@ export class ApiClient {
 
   putBlob(hash: string, stream: ReadableStream<Uint8Array>, size: number): Promise<BlobStored> {
     return this.send("PUT", `/v1/blobs/${hash}`, BlobStored, { stream, size });
+  }
+
+  tree(vaultId: VaultId, at?: number): Promise<TreeResponse> {
+    const query = at === undefined ? "" : `?at=${at}`;
+    return withRetry(() => this.send("GET", `/v1/vaults/${vaultId}/tree${query}`, TreeResponse));
+  }
+
+  history(vaultId: VaultId, path: string): Promise<ChangeRow[]> {
+    const url = `/v1/vaults/${vaultId}/history?path=${encodeURIComponent(path)}`;
+    return withRetry(() => this.send("GET", url, ChangeRow.array()));
+  }
+
+  snapshots(vaultId: VaultId): Promise<SnapshotInfo[]> {
+    return withRetry(() => this.send("GET", `/v1/vaults/${vaultId}/snapshots`, SnapshotInfo.array()));
+  }
+
+  createSnapshot(vaultId: VaultId): Promise<SnapshotInfo | null> {
+    return this.send("POST", `/v1/vaults/${vaultId}/snapshots`, SnapshotInfo.nullable());
+  }
+
+  snapshotTree(vaultId: VaultId, seq: number): Promise<TreeResponse> {
+    return withRetry(() => this.send("GET", `/v1/vaults/${vaultId}/snapshots/${seq}`, TreeResponse));
+  }
+
+  async blobContent(hash: string): Promise<ReadableStream<Uint8Array>> {
+    const res = await this.raw("GET", `/v1/blobs/${hash}/content`);
+    if (!res.ok || res.body === null) throw await ApiError.fromResponse(res);
+    return res.body;
+  }
+
+  devices(vaultId: VaultId): Promise<DeviceInfo[]> {
+    return this.send("GET", `/v1/devices?vaultId=${vaultId}`, DeviceInfo.array());
+  }
+
+  revokeDevice(vaultId: VaultId, deviceId: DeviceId): Promise<unknown> {
+    return this.send("POST", `/v1/devices/${deviceId}/revoke`, z.unknown(), { json: { vaultId } });
   }
 
   async createUpload(hash: string): Promise<string> {

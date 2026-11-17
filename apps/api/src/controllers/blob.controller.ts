@@ -21,6 +21,18 @@ export const blobController = new Hono<DeviceEnv>()
     return c.body(null, exists ? 200 : 404);
   })
 
+  .get("/:sha256/content", validate("param", blobParamSchema), async (c) => {
+    const { sha256 } = c.req.valid("param");
+    const blob = await c.var.container.blobService.content(c.var.auth, sha256);
+    return new Response(blob.body, {
+      headers: {
+        "Content-Type": "application/octet-stream",
+        "Content-Length": String(blob.size),
+        ETag: `"${sha256}"`,
+      },
+    });
+  })
+
   .put("/:sha256", validate("param", blobParamSchema), validate("header", contentLengthSchema), async (c) => {
     const size = c.req.valid("header")["content-length"];
     const data = await c.var.container.blobService.store(c.var.auth, {

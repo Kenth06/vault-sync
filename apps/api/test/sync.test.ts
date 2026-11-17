@@ -5,7 +5,8 @@ import {
   CommitResponse,
   PlanResponse,
   Sha256,
-  TreeEntry,
+  TreeResponse,
+  VaultId,
   VaultStatus,
 } from "@vault-sync/protocol";
 import { evictDurableObject } from "cloudflare:test";
@@ -53,7 +54,7 @@ describe("auth", () => {
   it("does not write to R2 for an unauthenticated upload", async () => {
     const hash = await sha256("secret note");
     expect((await putBlob(hash, "secret note", forged)).status).toBe(401);
-    expect(await env.BUCKET.head(blobKey(Sha256.parse(hash)))).toBeNull();
+    expect(await env.BUCKET.head(blobKey(VaultId.parse("v-auth"), Sha256.parse(hash)))).toBeNull();
   });
 });
 
@@ -80,8 +81,8 @@ describe("push: plan, upload, commit", () => {
       replayed: false,
     });
 
-    const tree = await readData(await call(`/v1/vaults/${vault}/tree`, { token }), TreeEntry.array());
-    expect(tree.map((e) => e.path)).toEqual(["Notas/Café.md"]);
+    const tree = await readData(await call(`/v1/vaults/${vault}/tree`, { token }), TreeResponse);
+    expect(tree.files.map((e) => e.path)).toEqual(["Notas/Café.md"]);
 
     const raw = await call(`/v1/vaults/${vault}/raw/${encodeURIComponent("Notas/Café.md")}`, { token });
     expect(new TextDecoder().decode(await raw.arrayBuffer())).toBe("# hola");
@@ -139,13 +140,13 @@ describe("push: plan, upload, commit", () => {
 
     await evictDurableObject(env.VAULT.getByName(vault));
 
-    let tree = await readData(await call(`/v1/vaults/${vault}/tree`, { token }), TreeEntry.array());
-    expect(tree.map((e) => e.path)).toEqual(["new.md"]);
+    let tree = await readData(await call(`/v1/vaults/${vault}/tree`, { token }), TreeResponse);
+    expect(tree.files.map((e) => e.path)).toEqual(["new.md"]);
 
     const remove = { op: "delete", path: "new.md" };
     await json(`/v1/vaults/${vault}/commit`, { batchId: batch(), baseCursor: 2, changes: [remove] }, token);
-    tree = await readData(await call(`/v1/vaults/${vault}/tree`, { token }), TreeEntry.array());
-    expect(tree).toEqual([]);
+    tree = await readData(await call(`/v1/vaults/${vault}/tree`, { token }), TreeResponse);
+    expect(tree.files).toEqual([]);
 
     const log = await readData(await call(`/v1/vaults/${vault}/changes?since=0`, { token }), ChangeRow.array());
     expect(log.map((c) => c.op)).toEqual(["put", "rename", "delete"]);

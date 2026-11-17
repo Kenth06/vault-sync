@@ -12,6 +12,11 @@ export interface BlobUpload {
   readonly size: number;
 }
 
+export interface BlobContent {
+  readonly body: ReadableStream;
+  readonly size: number;
+}
+
 export interface PartUpload extends BlobUpload {
   readonly uploadId: string;
   readonly part: number;
@@ -33,25 +38,32 @@ export class BlobService extends BaseService {
     if (await this.exists(auth, upload.hash)) {
       return { stored: false, size: upload.size };
     }
-    const object = await this.putVerified(upload);
+    const object = await this.putVerified(blobKey(auth.vaultId, upload.hash), upload);
     await this.register(auth, upload.hash, object.size);
     return { stored: true, size: object.size };
   }
 
+  async content(auth: DeviceAuth, hash: Sha256): Promise<BlobContent> {
+    await this.authorize(auth);
+    const object = await this.bucket.get(blobKey(auth.vaultId, hash));
+    if (!object) throw new AppError("ERR_NOT_FOUND", "no such blob in this vault");
+    return { body: object.body, size: object.size };
+  }
+
   async createUpload(auth: DeviceAuth, hash: Sha256): Promise<string> {
     if (await this.exists(auth, hash)) throw new AppError("ERR_CONFLICT", "blob already stored");
-    return (await this.bucket.createMultipartUpload(blobKey(hash))).uploadId;
+    return (await this.bucket.createMultipartUpload(blobKey(auth.vaultId, hash))).uploadId;
   }
 
   async uploadPart(auth: DeviceAuth, upload: PartUpload): Promise<UploadedPart> {
     await this.authorize(auth);
-    const multipart = this.bucket.resumeMultipartUpload(blobKey(upload.hash), upload.uploadId);
+    const multipart = this.bucket.resumeMultipartUpload(blobKey(auth.vaultId, upload.hash), upload.uploadId);
     const { partNumber, etag } = await multipart.uploadPart(upload.part, upload.body);
     return { partNumber, etag };
   }
 
   async completeUpload(auth: DeviceAuth, completion: UploadCompletion): Promise<BlobStored> {
-    const multipart = this.bucket.resumeMultipartUpload(blobKey(completion.hash), completion.uploadId);
+    const multipart = this.bucket.resumeMultipartUpload(blobKey(auth.vaultId, completion.hash), completion.uploadId);
     if (await this.exists(auth, completion.hash)) {
       await multipart.abort();
       return { stored: false, size: completion.size };
@@ -65,9 +77,9 @@ export class BlobService extends BaseService {
     return { stored: true, size: object.size };
   }
 
-  private async putVerified(upload: BlobUpload): Promise<R2Object> {
+  private async putVerified(key: string, upload: BlobUpload): Promise<R2Object> {
     try {
-      return await this.bucket.put(blobKey(upload.hash), upload.body, {
+      return await this.bucket.put(key, upload.body, {
         sha256: upload.hash,
         customMetadata: { size: String(upload.size) },
       });

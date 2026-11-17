@@ -1,6 +1,6 @@
 import ignore from "ignore";
 
-import { STATE_DIR } from "../common/constants.ts";
+import { STATE_DIR, TMP_SUFFIX } from "../common/constants.ts";
 
 const DEFAULT_RULES = [
   `${STATE_DIR}/`,
@@ -8,6 +8,7 @@ const DEFAULT_RULES = [
   ".trash/",
   ".DS_Store",
   "Thumbs.db",
+  `*${TMP_SUFFIX}`,
   ".obsidian/*",
   "!.obsidian/app.json",
   "!.obsidian/appearance.json",

@@ -4,15 +4,18 @@ import {
   parseToken,
   Seq,
   TOKEN_PREFIX,
+  VaultId,
   type ChangeRow,
   type CommitRequest,
   type CommitResponse,
+  type DeviceInfo,
   type EnrollResponse,
   type PlanRequest,
   type PlanResponse,
   type Sha256,
+  type SnapshotInfo,
   type TreeEntry,
-  type VaultId,
+  type TreeResponse,
   type VaultStatus,
 } from "@vault-sync/protocol";
 import { retryable } from "cloudflare:durable-objects";
@@ -21,14 +24,29 @@ import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
 
 import migrations from "../../drizzle/migrations/migrations.js";
-import { MAX_R2_LOOKUPS_PER_COMMIT, RATE_LIMIT_PER_MINUTE, RATE_LIMIT_WINDOW_MS } from "../common/constants.ts";
+import {
+  DEFAULT_GC_GRACE_MS,
+  MAX_R2_LOOKUPS_PER_COMMIT,
+  RATE_LIMIT_PER_MINUTE,
+  RATE_LIMIT_WINDOW_MS,
+  SNAPSHOT_INTERVAL_MS,
+} from "../common/constants.ts";
 import * as schema from "../entities/index.ts";
 import { randomBase64Url, randomHex, sha256Hex, timingSafeEqualHex } from "../utils/crypto.ts";
 import { SlidingWindowLimiter } from "../utils/rate-limiter.ts";
 import { fail, ok, type RpcResult } from "../utils/rpc-result.ts";
-import { hashesOf, VaultStore } from "./vault.store.ts";
+import { BlobStore } from "./stores/blob.store.ts";
+import { DeviceStore } from "./stores/device.store.ts";
+import { hashesOf, ManifestStore } from "./stores/manifest.store.ts";
+import { SnapshotStore, type SnapshotRecord } from "./stores/snapshot.store.ts";
+import { VaultMaintenance } from "./vault.maintenance.ts";
 
-type Authed<T> = (deviceId: DeviceId, vaultId: VaultId) => RpcResult<T> | Promise<RpcResult<T>>;
+type Authed<T> = (deviceId: DeviceId) => RpcResult<T> | Promise<RpcResult<T>>;
+
+function gcGraceMs(env: Env): number {
+  const parsed = Number(env.GC_GRACE_MS);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : DEFAULT_GC_GRACE_MS;
+}
 
 export class VaultDO extends DurableObject<Env> {
   static {
@@ -36,27 +54,47 @@ export class VaultDO extends DurableObject<Env> {
     retryable(this.prototype.plan, this.prototype.commit, this.prototype.registerBlob, this.prototype.claimBlob);
   }
 
-  private readonly store: VaultStore;
+  private readonly devices: DeviceStore;
+  private readonly blobs: BlobStore;
+  private readonly snapshots: SnapshotStore;
+  private readonly manifest: ManifestStore;
   private readonly limiter = new SlidingWindowLimiter(RATE_LIMIT_PER_MINUTE, RATE_LIMIT_WINDOW_MS);
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
     const db = drizzle(ctx.storage, { schema });
-    this.store = new VaultStore(db, (fn) => ctx.storage.transactionSync(fn));
+    this.devices = new DeviceStore(db);
+    this.blobs = new BlobStore(db);
+    this.snapshots = new SnapshotStore(db);
+    this.manifest = new ManifestStore({
+      db,
+      transactionSync: (fn) => ctx.storage.transactionSync(fn),
+      blobs: this.blobs,
+      devices: this.devices,
+    });
     void ctx.blockConcurrencyWhile(async () => {
       await migrate(db, migrations);
     });
   }
 
+  private get vaultId(): VaultId {
+    return VaultId.parse(this.ctx.id.name);
+  }
+
   async enroll(vaultId: VaultId, name: string): Promise<EnrollResponse> {
     const deviceId = DeviceId.parse(`dev_${randomHex(8)}`);
     const token = `${TOKEN_PREFIX}.${vaultId}.${deviceId}.${randomBase64Url(32)}`;
-    this.store.insertDevice({ id: deviceId, name, tokenHash: await sha256Hex(token), now: Date.now() });
-    return { deviceId, token, cursor: Seq.parse(this.store.cursor()) };
+    const cursor = this.manifest.cursor();
+    this.devices.insert({ id: deviceId, name, tokenHash: await sha256Hex(token), cursor, now: Date.now() });
+    return { deviceId, token, cursor: Seq.parse(cursor) };
+  }
+
+  listDevices(): DeviceInfo[] {
+    return this.devices.list();
   }
 
   revokeDevice(deviceId: DeviceId): RpcResult<{ revoked: true }> {
-    return this.store.revokeDevice(deviceId) ? ok({ revoked: true }) : fail("ERR_NOT_FOUND", "no such device");
+    return this.devices.revoke(deviceId) ? ok({ revoked: true }) : fail("ERR_NOT_FOUND", "no such device");
   }
 
   authorize(token: string): Promise<RpcResult<{ deviceId: DeviceId }>> {
@@ -64,86 +102,140 @@ export class VaultDO extends DurableObject<Env> {
   }
 
   status(token: string): Promise<RpcResult<VaultStatus>> {
-    return this.authed(token, (deviceId, vaultId) =>
+    return this.authed(token, (deviceId) =>
       ok({
-        vaultId,
-        cursor: Seq.parse(this.store.cursor()),
-        ...this.store.totals(),
-        deviceCursor: Seq.parse(this.store.findDevice(deviceId)?.cursor ?? 0),
+        vaultId: this.vaultId,
+        cursor: Seq.parse(this.manifest.cursor()),
+        ...this.manifest.totals(),
+        deviceCursor: Seq.parse(this.devices.find(deviceId)?.cursor ?? 0),
       }),
     );
   }
 
   plan(token: string, req: PlanRequest): Promise<RpcResult<PlanResponse>> {
-    return this.authed(token, (deviceId) => ok(this.store.plan(deviceId, req)));
+    return this.authed(token, (deviceId) => ok(this.manifest.plan(deviceId, req)));
   }
 
   commit(token: string, req: CommitRequest): Promise<RpcResult<CommitResponse>> {
     return this.authed(token, async (deviceId) => {
-      const replay = this.store.findBatch(req.batchId);
+      const replay = this.manifest.findBatch(req.batchId);
       if (replay) return ok(replay);
 
       const missing = await this.registerFromR2(hashesOf(req.changes));
       if (missing.length > 0) return fail("ERR_CONFLICT", "blobs not uploaded", { missing });
 
-      return ok(this.store.commit(deviceId, req, Date.now()));
+      const result = this.manifest.commit(deviceId, req, Date.now());
+      if (result.seqTo !== null) await this.ensureAlarm(Date.now() + SNAPSHOT_INTERVAL_MS);
+      return ok(result);
     });
   }
 
   claimBlob(token: string, hash: Sha256): Promise<RpcResult<boolean>> {
     return this.authed(token, async () => {
-      if (this.store.unknownHashes([hash]).length === 0) return ok(true);
-      const head = await this.env.BUCKET.head(blobKey(hash));
-      if (head) this.store.registerBlob(hash, head.size, Date.now());
+      if (this.blobs.unknown([hash]).length === 0) return ok(true);
+      const head = await this.env.BUCKET.head(blobKey(this.vaultId, hash));
+      if (head) this.blobs.register(hash, head.size, Date.now());
       return ok(head !== null);
     });
   }
 
   registerBlob(token: string, hash: Sha256, size: number): Promise<RpcResult<null>> {
     return this.authed(token, () => {
-      this.store.registerBlob(hash, size, Date.now());
+      this.blobs.register(hash, size, Date.now());
       return ok(null);
     });
   }
 
   listChanges(token: string, since: number, limit: number): Promise<RpcResult<ChangeRow[]>> {
-    return this.authed(token, () => ok(this.store.listChanges(since, limit)));
+    return this.authed(token, () => ok(this.manifest.listChanges(since, limit)));
   }
 
-  tree(token: string): Promise<RpcResult<TreeEntry[]>> {
-    return this.authed(token, () => ok(this.store.tree()));
+  history(token: string, path: string, limit: number): Promise<RpcResult<ChangeRow[]>> {
+    return this.authed(token, () => ok(this.manifest.history(path, limit)));
+  }
+
+  tree(token: string, at: number | undefined): Promise<RpcResult<TreeResponse>> {
+    return this.authed(token, () => {
+      const cursor = this.manifest.cursor();
+      if (at === undefined || at >= cursor) return ok({ seq: Seq.parse(cursor), files: this.manifest.tree() });
+      return ok({ seq: Seq.parse(at), files: this.manifest.treeAt(at) });
+    });
   }
 
   getFile(token: string, path: string): Promise<RpcResult<TreeEntry>> {
     return this.authed(token, () => {
-      const entry = this.store.getFile(path);
+      const entry = this.manifest.getFile(path);
       return entry ? ok(entry) : fail("ERR_NOT_FOUND", "no such file");
     });
+  }
+
+  listSnapshots(token: string): Promise<RpcResult<SnapshotInfo[]>> {
+    return this.authed(token, () => ok(this.snapshots.list()));
+  }
+
+  findSnapshot(token: string, seq: number): Promise<RpcResult<SnapshotRecord>> {
+    return this.authed(token, () => {
+      const record = this.snapshots.find(seq);
+      return record ? ok(record) : fail("ERR_NOT_FOUND", "no such snapshot");
+    });
+  }
+
+  createSnapshot(token: string): Promise<RpcResult<SnapshotInfo | null>> {
+    return this.authed(token, async () => ok(await this.maintenance().snapshotIfChanged(Date.now())));
+  }
+
+  override async alarm(): Promise<void> {
+    await this.ctx.storage.setAlarm(Date.now() + SNAPSHOT_INTERVAL_MS);
+    const report = await this.maintenance().run(Date.now());
+    console.info(JSON.stringify({ level: "info", event: "vault.maintenance", vaultId: this.vaultId, ...report }));
+    if (report.nextRunAt === null) await this.ctx.storage.deleteAlarm();
+    else await this.ctx.storage.setAlarm(report.nextRunAt);
+  }
+
+  private maintenance(): VaultMaintenance {
+    return new VaultMaintenance({
+      vaultId: this.vaultId,
+      bucket: this.env.BUCKET,
+      manifest: this.manifest,
+      blobs: this.blobs,
+      snapshots: this.snapshots,
+      gcGraceMs: gcGraceMs(this.env),
+      exclusive: (work) => this.ctx.blockConcurrencyWhile(work),
+    });
+  }
+
+  private async ensureAlarm(at: number): Promise<void> {
+    const current = await this.ctx.storage.getAlarm();
+    if (current === null || current > at) await this.ctx.storage.setAlarm(at);
   }
 
   private async authed<T>(token: string, run: Authed<T>): Promise<RpcResult<T>> {
     const parsed = parseToken(token);
     if (!parsed || parsed.vaultId !== this.ctx.id.name) return fail("ERR_UNAUTHORIZED", "invalid token");
 
-    const device = this.store.findDevice(parsed.deviceId);
+    const device = this.devices.find(parsed.deviceId);
     const presented = await sha256Hex(token);
     if (!device || !timingSafeEqualHex(presented, device.tokenHash)) return fail("ERR_UNAUTHORIZED", "invalid token");
     if (device.revoked) return fail("ERR_FORBIDDEN", "device has been revoked");
-    if (!this.limiter.take(parsed.deviceId)) return fail("ERR_RATE_LIMITED", "too many requests");
+    if (!this.limiter.take(parsed.deviceId)) {
+      return fail("ERR_RATE_LIMITED", "too many requests", {
+        retryAfterMs: this.limiter.retryAfterMs(parsed.deviceId),
+      });
+    }
 
-    this.store.touchDevice(parsed.deviceId, Date.now());
-    return run(parsed.deviceId, parsed.vaultId);
+    this.devices.touch(parsed.deviceId, Date.now());
+    return run(parsed.deviceId);
   }
 
   private async registerFromR2(hashes: Sha256[]): Promise<Sha256[]> {
-    const unknown = this.store.unknownHashes(hashes);
+    const unknown = this.blobs.unknown(hashes);
     if (unknown.length === 0 || unknown.length > MAX_R2_LOOKUPS_PER_COMMIT) return unknown;
 
-    const heads = await Promise.all(unknown.map((h) => this.env.BUCKET.head(blobKey(h))));
+    const heads = await Promise.all(unknown.map((h) => this.env.BUCKET.head(blobKey(this.vaultId, h))));
     const now = Date.now();
     return unknown.filter((hash, i) => {
       const head = heads[i];
-      if (head) this.store.registerBlob(hash, head.size, now);
+      if (head) this.blobs.register(hash, head.size, now);
       return !head;
     });
   }

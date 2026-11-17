@@ -15,3 +15,17 @@ export const EnrollResponse = z.object({
   cursor: Seq,
 });
 export type EnrollResponse = z.infer<typeof EnrollResponse>;
+
+export const DeviceInfo = z.object({
+  id: DeviceId,
+  name: z.string(),
+  cursor: Seq,
+  lastSeen: z.number().int().nullable(),
+  revoked: z.boolean(),
+});
+export type DeviceInfo = z.infer<typeof DeviceInfo>;
+
+export const VaultScope = z.object({ vaultId: VaultId });
+export type VaultScope = z.infer<typeof VaultScope>;
+
+export const DeviceParam = z.object({ deviceId: DeviceId });

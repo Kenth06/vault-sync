@@ -43,6 +43,26 @@ describe("withRetry", () => {
     vi.useRealTimers();
   });
 
+  it("waits at least Retry-After before retrying a 429", async () => {
+    vi.useFakeTimers();
+    const limited = new ApiError({ status: 429, code: "ERR_RATE_LIMITED", message: "slow down", retryAfterMs: 30_000 });
+    const run = vi.fn<() => Promise<string>>().mockRejectedValueOnce(limited).mockResolvedValue("ok");
+    const result = withRetry(run);
+    await vi.advanceTimersByTimeAsync(29_000);
+    expect(run).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(await result).toBe("ok");
+    vi.useRealTimers();
+  });
+
+  it("reads Retry-After from the response", async () => {
+    const res = Response.json(
+      { error: "slow down", code: "ERR_RATE_LIMITED" },
+      { status: 429, headers: { "Retry-After": "12" } },
+    );
+    expect((await ApiError.fromResponse(res)).retryAfterMs).toBe(12_000);
+  });
+
   it("does not retry client errors", async () => {
     const run = vi.fn<() => Promise<string>>().mockRejectedValue(error(409, "ERR_CONFLICT"));
     await expect(withRetry(run)).rejects.toMatchObject({ code: "ERR_CONFLICT" });

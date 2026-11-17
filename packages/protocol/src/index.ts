@@ -5,5 +5,6 @@ export * from "./envelope.schema.ts";
 export * from "./ids.ts";
 export * from "./limits.ts";
 export * from "./path.ts";
+export * from "./snapshot.schema.ts";
 export * from "./sync.schema.ts";
 export * from "./vault.schema.ts";

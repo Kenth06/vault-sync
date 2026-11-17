@@ -4,15 +4,17 @@ Target plan: Workers Paid (USD 5/month base). Free-plan limits (10 ms CPU, 50 su
 
 ## What drives the bill
 
-| Driver                      | Where it comes from                              | How the code keeps it down                                                                                                                   |
-| --------------------------- | ------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------- |
-| DO requests                 | Every API call reaches `VaultDO`                 | Auth runs inside the operation's RPC: one DO request per API call. Blob upload is the only path with two (`authorize`, then `registerBlob`). |
-| DO duration (GB-s)          | Time a DO is active, including time awaiting I/O | No `fetch` from the DO; R2 lookups in `commit` are batched with `Promise.all` and capped at 50. No alarms in F1.                             |
-| DO storage                  | SQLite rows (`files`, `changes`, `blobs`)        | ~200 B/row: 100k files + 1M changes ≈ 250 MB. Log compaction arrives in F2.                                                                  |
-| Worker requests / CPU       | Each HTTP call                                   | Hashing happens on the client; R2 verifies SHA-256 server side; bodies stream without buffering.                                             |
-| R2 Class A / B ops, storage | PUT/HEAD/GET of blobs                            | Content-addressed dedupe: a byte sequence is uploaded once, globally.                                                                        |
+| Driver                      | Where it comes from                                         | How the code keeps it down                                                                                                                                                                                       |
+| --------------------------- | ----------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| DO requests                 | Every API call reaches `VaultDO`                            | Auth runs inside the operation's RPC: one DO request per API call. Blob upload is the only path with two (`authorize`, then `registerBlob`).                                                                     |
+| DO duration (GB-s)          | Time a DO is active, including time awaiting I/O            | No `fetch` from the DO; R2 lookups in `commit` are batched with `Promise.all` and capped at 50. The maintenance alarm runs at most once a day per vault, and only while there is work (see `docs/decisions.md`). |
+| DO storage                  | SQLite rows (`files`, `changes`, `blobs`, `snapshots`)      | ~200 B/row: 100k files + 1M changes ≈ 250 MB. Log compaction is still open; the 10 GB per-DO limit leaves ample room.                                                                                            |
+| Worker requests / CPU       | Each HTTP call                                              | Hashing happens on the client; R2 verifies SHA-256 server side; bodies stream without buffering.                                                                                                                 |
+| R2 Class A / B ops, storage | PUT/HEAD/GET of blobs, one snapshot PUT per day, GC deletes | Content-addressed dedupe within the vault. Snapshots are gzip JSON (a few MB for 100k files); retention keeps at most 42. GC deletes orphans after 7 days in batches of 1000 keys per call.                      |
 
 The biggest lever is the client: the daemon debounces (~2 s), batches up to 500 changes / 50 MB and backs off on errors. A regression there multiplies every line above.
+
+`GET /tree?at=<seq>` scans the change log up to `seq`, so its cost grows with the log until compaction exists; the live tree (`/tree` without `at`) reads only the `files` table.
 
 A per-device rate limit (600 requests/minute, `RATE_LIMIT_PER_MINUTE` in `apps/api/src/common/constants.ts`) cuts off a runaway client before it costs real money.
 

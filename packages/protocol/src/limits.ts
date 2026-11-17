@@ -6,3 +6,4 @@ export const MAX_PATH_LENGTH = 1024;
 export const MAX_DEVICE_NAME_LENGTH = 100;
 export const MAX_PAGE_SIZE = 1000;
 export const DEFAULT_PAGE_SIZE = 500;
+export const MAX_HISTORY_ENTRIES = 200;

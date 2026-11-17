@@ -8,5 +8,6 @@
   - `add-endpoint` — the layer-by-layer change for any API route or DO method
   - `do-cost-review` — billing impact of DO, route or CLI changes
   - `durable-objects`, `workers-best-practices`, `wrangler` — Cloudflare references (prefer the docs over memory for any API detail)
+  - `security-audit` — Cloudflare's security audit workflow (vendored, see its `VENDORED.md`). Guidance mode for focused reviews; full audit mode only on request, and only under WSL/Linux/macOS because its validators fail closed on native Windows. Audit output goes outside the repo.
 - Subagent `reviewer` — run it on the diff before committing a feature.
 - Cloudflare APIs changed a lot in 2026 (`exports`, `retryable()`, `@cloudflare/vitest-plugin`, spend limits). Check the Cloudflare docs before relying on what you remember.

@@ -3,6 +3,7 @@ import {
   DeviceId,
   Seq,
   Sha256,
+  type TreeEntry,
   VaultPath,
   type Change,
   type ChangeRow,
@@ -14,41 +15,30 @@ import {
   type PlanResponse,
   type PutChange,
   type RenameChange,
-  type TreeEntry,
 } from "@vault-sync/protocol";
-import { and, count, eq, gt, inArray, ne, sql, sum } from "drizzle-orm";
-import type { DrizzleSqliteDODatabase } from "drizzle-orm/durable-sqlite";
+import { and, count, desc, eq, gt, inArray, ne, or, sql, sum } from "drizzle-orm";
+import { z } from "zod";
 
-import { SQLITE_IN_CHUNK } from "../common/constants.ts";
-import type * as schema from "../entities/index.ts";
-import {
-  batches,
-  blobs,
-  changes,
-  devices,
-  files,
-  type BatchRow,
-  type ChangeInsert,
-  type DeviceRow,
-  type FileRow,
-} from "../entities/index.ts";
+import { SQLITE_IN_CHUNK } from "../../common/constants.ts";
+import { batches, changes, files, type BatchRow, type ChangeInsert, type FileRow } from "../../entities/index.ts";
+import type { BlobStore } from "./blob.store.ts";
+import { chunk, type Db, type TransactionSync } from "./db.ts";
+import type { DeviceStore } from "./device.store.ts";
 
-type Db = DrizzleSqliteDODatabase<typeof schema>;
 type LogEntry = Omit<ChangeInsert, "deviceId" | "batchId" | "at">;
+type Record = (entry: LogEntry) => number;
 
-interface FileState {
-  readonly path: string;
-  readonly hash: string;
-  readonly size: number;
-  readonly mtime: number;
-  readonly seq: number;
+interface Context {
+  readonly record: Record;
+  readonly now: number;
 }
 
-function chunk<T>(items: readonly T[], size: number): T[][] {
-  const out: T[][] = [];
-  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
-  return out;
-}
+const TreeAtRow = z.object({
+  path: z.string(),
+  hash: z.string(),
+  size: z.number().nullable(),
+  mtime: z.number().nullable(),
+});
 
 export function hashesOf(list: readonly Change[]): Sha256[] {
   const set = new Set<Sha256>();
@@ -56,49 +46,51 @@ export function hashesOf(list: readonly Change[]): Sha256[] {
   return [...set];
 }
 
-function toEntry(row: FileRow & { hash: string }): TreeEntry {
+function toEntry(row: { path: string; hash: string; size: number | null; mtime: number | null }): TreeEntry {
   return { path: row.path, hash: Sha256.parse(row.hash), size: row.size ?? 0, mtime: row.mtime ?? 0 };
 }
 
-export class VaultStore {
+function toChangeRow(r: typeof changes.$inferSelect): ChangeRow {
+  return {
+    seq: Seq.parse(r.seq),
+    op: r.op,
+    path: r.path,
+    fromPath: r.fromPath,
+    hash: r.hash === null ? null : Sha256.parse(r.hash),
+    prevHash: r.prevHash === null ? null : Sha256.parse(r.prevHash),
+    size: r.size,
+    mtime: r.mtime,
+    deviceId: DeviceId.parse(r.deviceId),
+    at: r.at,
+  };
+}
+
+export interface ManifestDependencies {
+  readonly db: Db;
+  readonly transactionSync: TransactionSync;
+  readonly blobs: BlobStore;
+  readonly devices: DeviceStore;
+}
+
+export class ManifestStore {
   private readonly db: Db;
-  private readonly transactionSync: <T>(fn: () => T) => T;
+  private readonly transactionSync: TransactionSync;
+  private readonly blobs: BlobStore;
+  private readonly devices: DeviceStore;
 
-  constructor(db: Db, transactionSync: <T>(fn: () => T) => T) {
-    this.db = db;
-    this.transactionSync = transactionSync;
+  constructor(deps: ManifestDependencies) {
+    this.db = deps.db;
+    this.transactionSync = deps.transactionSync;
+    this.blobs = deps.blobs;
+    this.devices = deps.devices;
   }
 
-  insertDevice(row: { id: DeviceId; name: string; tokenHash: string; now: number }): void {
-    this.db
-      .insert(devices)
-      .values({ id: row.id, name: row.name, tokenHash: row.tokenHash, cursor: this.cursor(), lastSeen: row.now })
-      .run();
-  }
-
-  findDevice(id: DeviceId): DeviceRow | undefined {
-    return this.db.select().from(devices).where(eq(devices.id, id)).get();
-  }
-
-  touchDevice(id: DeviceId, now: number): void {
-    this.db.update(devices).set({ lastSeen: now }).where(eq(devices.id, id)).run();
-  }
-
-  revokeDevice(id: DeviceId): boolean {
-    return this.db.update(devices).set({ revoked: true }).where(eq(devices.id, id)).returning().all().length > 0;
-  }
-
-  registerBlob(hash: Sha256, size: number, now: number): void {
-    this.db.insert(blobs).values({ hash, size, refs: 0, orphanedAt: now }).onConflictDoNothing().run();
-  }
-
-  unknownHashes(hashes: readonly Sha256[]): Sha256[] {
-    const known = new Set<string>();
-    for (const part of chunk(hashes, SQLITE_IN_CHUNK)) {
-      const rows = this.db.select({ hash: blobs.hash }).from(blobs).where(inArray(blobs.hash, part)).all();
-      for (const r of rows) known.add(r.hash);
-    }
-    return hashes.filter((h) => !known.has(h));
+  cursor(): number {
+    const r = this.db
+      .select({ max: sql<number | null>`max(${changes.seq})` })
+      .from(changes)
+      .get();
+    return r?.max ?? 0;
   }
 
   plan(deviceId: DeviceId, req: PlanRequest): PlanResponse {
@@ -109,7 +101,7 @@ export class VaultStore {
     }
     return {
       cursor: Seq.parse(this.cursor()),
-      missing: this.unknownHashes(hashesOf(req.changes)),
+      missing: this.blobs.unknown(hashesOf(req.changes)),
       conflicts: chunk([...paths], SQLITE_IN_CHUNK).flatMap((part) =>
         this.foreignChanges(deviceId, part, req.baseCursor),
       ),
@@ -127,7 +119,7 @@ export class VaultStore {
       if (replay) return replay;
 
       const seqs: number[] = [];
-      const record = (entry: LogEntry): number => {
+      const record: Record = (entry) => {
         const { seq } = this.db
           .insert(changes)
           .values({ ...entry, deviceId, batchId: req.batchId, at: now })
@@ -137,21 +129,13 @@ export class VaultStore {
         return seq;
       };
 
-      for (const c of req.changes) this.apply(c, record, now);
+      for (const c of req.changes) this.apply(c, { record, now });
 
       const row: BatchRow = { batchId: req.batchId, seqFrom: seqs.at(0) ?? null, seqTo: seqs.at(-1) ?? null, at: now };
       this.db.insert(batches).values(row).run();
-      this.db.update(devices).set({ cursor: this.cursor() }).where(eq(devices.id, deviceId)).run();
+      this.devices.setCursor(deviceId, this.cursor());
       return this.batchResult(row, false);
     });
-  }
-
-  cursor(): number {
-    const r = this.db
-      .select({ max: sql<number | null>`max(${changes.seq})` })
-      .from(changes)
-      .get();
-    return r?.max ?? 0;
   }
 
   listChanges(since: number, limit: number): ChangeRow[] {
@@ -162,16 +146,18 @@ export class VaultStore {
       .orderBy(changes.seq)
       .limit(limit)
       .all()
-      .map((r) => ({
-        seq: Seq.parse(r.seq),
-        op: r.op,
-        path: r.path,
-        fromPath: r.fromPath,
-        hash: r.hash === null ? null : Sha256.parse(r.hash),
-        prevHash: r.prevHash === null ? null : Sha256.parse(r.prevHash),
-        deviceId: DeviceId.parse(r.deviceId),
-        at: r.at,
-      }));
+      .map(toChangeRow);
+  }
+
+  history(path: string, limit: number): ChangeRow[] {
+    return this.db
+      .select()
+      .from(changes)
+      .where(or(eq(changes.path, path), eq(changes.fromPath, path)))
+      .orderBy(desc(changes.seq))
+      .limit(limit)
+      .all()
+      .map(toChangeRow);
   }
 
   tree(): TreeEntry[] {
@@ -182,6 +168,24 @@ export class VaultStore {
       .orderBy(files.path)
       .all()
       .flatMap((r) => (r.hash === null ? [] : [toEntry({ ...r, hash: r.hash })]));
+  }
+
+  treeAt(seq: number): TreeEntry[] {
+    const rows = this.db.all(sql`
+      with last as (
+        select ${changes.path} as path, max(${changes.seq}) as seq
+        from ${changes} where ${changes.seq} <= ${seq} group by ${changes.path}
+      )
+      select c.path as path, c.hash as hash, c.size as size, c.mtime as mtime
+      from ${changes} c join last on c.path = last.path and c.seq = last.seq
+      where c.op != 'delete'
+        and not exists (
+          select 1 from ${changes} r
+          where r.op = 'rename' and r.from_path = c.path and r.seq > c.seq and r.seq <= ${seq}
+        )
+      order by c.path
+    `);
+    return TreeAtRow.array().parse(rows).map(toEntry);
   }
 
   getFile(path: string): TreeEntry | null {
@@ -212,58 +216,69 @@ export class VaultStore {
       }));
   }
 
-  private apply(c: Change, record: (entry: LogEntry) => number, now: number): void {
+  private apply(c: Change, ctx: Context): void {
     switch (c.op) {
       case "put": {
-        this.applyPut(c, record, now);
+        this.applyPut(c, ctx);
         break;
       }
       case "delete": {
-        this.applyDelete(c, record, now);
+        this.applyDelete(c, ctx);
         break;
       }
       case "rename": {
-        this.applyRename(c, record, now);
+        this.applyRename(c, ctx);
         break;
       }
     }
   }
 
-  private applyPut(c: PutChange, record: (entry: LogEntry) => number, now: number): void {
+  private applyPut(c: PutChange, ctx: Context): void {
     const prev = this.liveFile(c.path);
     if (prev?.hash === c.hash) {
       this.db.update(files).set({ mtime: c.mtime }).where(eq(files.path, c.path)).run();
       return;
     }
-    const seq = record({ path: c.path, op: "put", hash: c.hash, prevHash: prev?.hash ?? null });
+    const seq = ctx.record({
+      path: c.path,
+      op: "put",
+      hash: c.hash,
+      prevHash: prev?.hash ?? null,
+      size: c.size,
+      mtime: c.mtime,
+    });
     this.upsertFile({ path: c.path, hash: c.hash, size: c.size, mtime: c.mtime, seq });
-    this.swapRef(c.hash, prev?.hash, now);
+    this.blobs.addRef(c.hash, { seq, now: ctx.now });
+    if (prev?.hash != null) this.blobs.dropRef(prev.hash, { seq, now: ctx.now });
   }
 
-  private applyDelete(c: DeleteChange, record: (entry: LogEntry) => number, now: number): void {
+  private applyDelete(c: DeleteChange, ctx: Context): void {
     const prev = this.liveFile(c.path);
     if (prev?.hash == null) return;
-    const seq = record({ path: c.path, op: "delete", hash: null, prevHash: prev.hash });
+    const seq = ctx.record({ path: c.path, op: "delete", hash: null, prevHash: prev.hash });
     this.markDeleted(c.path, seq);
-    this.dropRef(prev.hash, now);
+    this.blobs.dropRef(prev.hash, { seq, now: ctx.now });
   }
 
-  private applyRename(c: RenameChange, record: (entry: LogEntry) => number, now: number): void {
+  private applyRename(c: RenameChange, ctx: Context): void {
     const from = this.liveFile(c.fromPath);
     const target = this.liveFile(c.path);
-    const seq = record({
+    const seq = ctx.record({
       path: c.path,
       op: "rename",
       hash: c.hash,
       prevHash: target?.hash ?? null,
       fromPath: c.fromPath,
+      size: c.size,
+      mtime: c.mtime,
     });
+    this.blobs.addRef(c.hash, { seq, now: ctx.now });
     if (from?.hash != null) {
       this.markDeleted(c.fromPath, seq);
-      this.dropRef(from.hash, now);
+      this.blobs.dropRef(from.hash, { seq, now: ctx.now });
     }
     this.upsertFile({ path: c.path, hash: c.hash, size: c.size, mtime: c.mtime, seq });
-    this.swapRef(c.hash, target?.hash, now);
+    if (target?.hash != null) this.blobs.dropRef(target.hash, { seq, now: ctx.now });
   }
 
   private liveFile(path: string): FileRow | undefined {
@@ -271,7 +286,7 @@ export class VaultStore {
     return r && !r.deleted ? r : undefined;
   }
 
-  private upsertFile(state: FileState): void {
+  private upsertFile(state: { path: string; hash: string; size: number; mtime: number; seq: number }): void {
     const { hash, size, mtime, seq } = state;
     this.db
       .insert(files)
@@ -282,26 +297,6 @@ export class VaultStore {
 
   private markDeleted(path: string, seq: number): void {
     this.db.update(files).set({ hash: null, deleted: true, seq }).where(eq(files.path, path)).run();
-  }
-
-  private swapRef(added: string, removed: string | null | undefined, now: number): void {
-    this.db
-      .update(blobs)
-      .set({ refs: sql`${blobs.refs} + 1`, orphanedAt: null })
-      .where(eq(blobs.hash, added))
-      .run();
-    if (removed != null) this.dropRef(removed, now);
-  }
-
-  private dropRef(hash: string, now: number): void {
-    this.db
-      .update(blobs)
-      .set({
-        refs: sql`max(${blobs.refs} - 1, 0)`,
-        orphanedAt: sql`case when ${blobs.refs} - 1 <= 0 then ${now} else ${blobs.orphanedAt} end`,
-      })
-      .where(eq(blobs.hash, hash))
-      .run();
   }
 
   private batchResult(row: BatchRow, replayed: boolean): CommitResponse {

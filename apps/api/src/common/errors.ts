@@ -1,6 +1,7 @@
 import type { ErrorBody, ErrorCode } from "@vault-sync/protocol";
 import type { Context } from "hono";
 import type { ContentfulStatusCode } from "hono/utils/http-status";
+import { z } from "zod";
 
 const STATUS: Record<ErrorCode, ContentfulStatusCode> = {
   ERR_BAD_REQUEST: 400,
@@ -29,7 +30,11 @@ export class AppError extends Error {
   }
 }
 
+const RetryDetails = z.object({ retryAfterMs: z.number().nonnegative() });
+
 export function errorResponse(c: Context, error: AppError): Response {
+  const retry = RetryDetails.safeParse(error.details);
+  if (retry.success) c.header("Retry-After", String(Math.ceil(retry.data.retryAfterMs / 1000)));
   const body: ErrorBody =
     error.details === undefined
       ? { error: error.message, code: error.code }

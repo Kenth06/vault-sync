@@ -7,6 +7,14 @@
   "printWidth": 120,
   "trailingComma": "all",
   "arrowParens": "always",
-  "sortImports": { "newlinesBetween": true },
-  "ignorePatterns": ["**/drizzle/migrations/**", "**/worker-configuration.d.ts", "**/.wrangler/**", "pnpm-lock.yaml"]
+  "sortImports": {
+    "newlinesBetween": true
+  },
+  "ignorePatterns": [
+    "**/drizzle/migrations/**",
+    "**/worker-configuration.d.ts",
+    "**/.wrangler/**",
+    "pnpm-lock.yaml",
+    ".claude/skills/**"
+  ]
 }

@@ -17,6 +17,10 @@ const SyncedRow = z.object({ path: z.string(), hash: z.string(), size: z.number(
 const HashRow = z.object({ hash: z.string() });
 const MetaRow = z.object({ value: z.string() });
 
+export interface SyncedFile extends FileMeta {
+  readonly path: string;
+}
+
 export class LocalState {
   private readonly db: DatabaseSync;
 
@@ -54,6 +58,20 @@ export class LocalState {
         if (c.op === "rename") del.run(c.fromPath);
         if (c.op !== "delete") put.run(c.path, c.hash, c.size, c.mtime);
       }
+      this.setMeta("cursor", String(cursor));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
+  replaceSynced(files: readonly SyncedFile[], cursor: number): void {
+    const put = this.db.prepare("INSERT INTO synced (path, hash, size, mtime) VALUES (?, ?, ?, ?)");
+    this.db.exec("BEGIN");
+    try {
+      this.db.exec("DELETE FROM synced");
+      for (const f of files) put.run(f.path, f.hash, f.size, f.mtime);
       this.setMeta("cursor", String(cursor));
       this.db.exec("COMMIT");
     } catch (error) {

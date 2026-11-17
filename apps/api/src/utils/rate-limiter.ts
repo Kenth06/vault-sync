@@ -16,4 +16,9 @@ export class SlidingWindowLimiter {
     this.hits.set(key, recent);
     return allowed;
   }
+
+  retryAfterMs(key: string, now = Date.now()): number {
+    const oldest = this.hits.get(key)?.[0];
+    return oldest === undefined ? 0 : Math.max(0, oldest + this.windowMs - now);
+  }
 }

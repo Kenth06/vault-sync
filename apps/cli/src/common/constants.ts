@@ -11,3 +11,4 @@ export const WATCH_MAX_BACKOFF_MS = 5 * 60_000;
 
 export const HTTP_MAX_ATTEMPTS = 5;
 export const HTTP_BASE_DELAY_MS = 500;
+export const TMP_SUFFIX = ".vaultsync-tmp";

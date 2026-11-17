@@ -7,7 +7,7 @@ Change the layers in this order so types flow forward and nothing compiles again
 
 1. **Contract** — `packages/protocol/src/<domain>.schema.ts`. Export `const X` plus `type X = z.infer<typeof X>`. Use branded ids. A new error case reuses an existing `ERR_*` code unless clients must branch on it; a new code goes in `envelope.schema.ts` and in `STATUS` in `apps/api/src/common/errors.ts`.
 2. **Entity** (only for new tables or columns) — `apps/api/src/entities/<table>.entity.ts`, export from `index.ts`, then `pnpm --filter @vault-sync/api db:generate`.
-3. **Store** — `apps/api/src/durable-objects/vault.store.ts`. Synchronous Drizzle only: no `await`, no R2, no `fetch`.
+3. **Store** — the matching file in `apps/api/src/durable-objects/stores/`. Synchronous Drizzle only: no `await`, no R2, no `fetch`.
 4. **Durable Object** — `vault.durable-object.ts`. A public method that takes `token` first and wraps its body in `this.authed(token, ...)`. Return `RpcResult<T>` with `ok`/`fail`; never throw for expected failures. Add it to `retryable(...)` only if running it twice is harmless.
 5. **Service** — `apps/api/src/services/<domain>.service.ts`, extending `BaseService`. Call the stub once and `this.unwrap(...)` the result. R2 work lives here.
 6. **Controller** — `apps/api/src/controllers/<domain>.controller.ts`. `validate(target, schema)`, call `c.var.container.<service>`, return `c.json({ data })`. API-only param/header schemas go in `apps/api/src/schemas/`.

@@ -13,25 +13,49 @@
     "**/dist/**",
     "**/.wrangler/**",
     "**/.turbo/**",
-    "**/*.d.ts"
+    "**/*.d.ts",
+    ".claude/skills/**"
   ],
   "rules": {
     "no-inline-comments": "error",
     "no-warning-comments": "error",
     "typescript/ban-ts-comment": "error",
     "vitest/no-commented-out-tests": "error",
-
     "complexity": ["error", 10],
     "max-depth": ["error", 3],
     "max-params": ["error", 4],
-    "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
-    "max-lines-per-function": ["error", { "max": 60, "skipBlankLines": true, "skipComments": true }],
-
-    "eqeqeq": ["error", "always", { "null": "ignore" }],
+    "max-lines": [
+      "error",
+      {
+        "max": 300,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "max-lines-per-function": [
+      "error",
+      {
+        "max": 60,
+        "skipBlankLines": true,
+        "skipComments": true
+      }
+    ],
+    "eqeqeq": [
+      "error",
+      "always",
+      {
+        "null": "ignore"
+      }
+    ],
     "no-var": "error",
     "prefer-const": "error",
     "no-else-return": "error",
-    "no-console": ["error", { "allow": ["error", "warn"] }],
+    "no-console": [
+      "error",
+      {
+        "allow": ["error", "warn", "info"]
+      }
+    ],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/consistent-type-imports": "error",
@@ -44,7 +68,6 @@
     "import/no-cycle": "error",
     "import/no-duplicates": "error",
     "unicorn/prefer-node-protocol": "error",
-
     "typescript/prefer-readonly-parameter-types": "off",
     "no-redeclare": "off",
     "unicorn/no-null": "off",
@@ -57,7 +80,10 @@
   "overrides": [
     {
       "files": ["**/test/**"],
-      "rules": { "max-lines-per-function": "off", "no-magic-numbers": "off" }
+      "rules": {
+        "max-lines-per-function": "off",
+        "no-magic-numbers": "off"
+      }
     },
     {
       "files": ["**/*.mjs"],
@@ -72,7 +98,10 @@
     },
     {
       "files": ["apps/cli/**", "scripts/**"],
-      "rules": { "no-console": "off", "no-await-in-loop": "off" }
+      "rules": {
+        "no-console": "off",
+        "no-await-in-loop": "off"
+      }
     }
   ]
 }

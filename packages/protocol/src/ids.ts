@@ -24,8 +24,12 @@ export type Seq = z.infer<typeof Seq>;
 export const BatchId = z.uuid().brand<"BatchId">();
 export type BatchId = z.infer<typeof BatchId>;
 
-export function blobKey(hash: Sha256): string {
-  return `blobs/sha256/${hash.slice(0, 2)}/${hash.slice(2, 4)}/${hash}`;
+export function blobKey(vaultId: VaultId, hash: Sha256): string {
+  return `vaults/${vaultId}/blobs/${hash.slice(0, 2)}/${hash.slice(2, 4)}/${hash}`;
+}
+
+export function snapshotKey(vaultId: VaultId, seq: Seq): string {
+  return `vaults/${vaultId}/snapshots/${seq}.json.gz`;
 }
 
 export const TOKEN_PREFIX = "vs1";

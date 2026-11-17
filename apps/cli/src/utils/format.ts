@@ -10,3 +10,11 @@ export function formatBytes(bytes: number): string {
   }
   return `${value.toFixed(unit === 0 ? 0 : 1)} ${UNITS[unit] ?? "B"}`;
 }
+
+export function formatDate(at: number): string {
+  return new Date(at).toISOString().replace("T", " ").slice(0, 19);
+}
+
+export function shortHash(hash: string | null): string {
+  return hash === null ? "-" : hash.slice(0, 10);
+}
