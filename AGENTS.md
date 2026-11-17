@@ -90,13 +90,13 @@ Dependency direction: `controllers|commands → services → (durable-objects | 
 
 ## Deviations from the house stack standard
 
-| Standard                                     | Here                                              | Why                                                                              |
-| -------------------------------------------- | ------------------------------------------------- | -------------------------------------------------------------------------------- |
-| Effect v4 (`Layer`, `TaggedError`, `Schema`) | Hono + Zod + plain `di.ts`                        | Owner's choice for this project; Zod schemas are shared with the CLI.            |
-| Awilix container                             | `createContainer(env)` returning typed services   | No proxy/string resolution; the compiler checks every dependency.                |
-| D1 + `BaseService` CRUD                      | Durable Object SQLite + synchronous stores        | One strongly consistent database per vault, atomic commits without network hops. |
-| `new_sqlite_classes` migrations              | `exports` in `wrangler.jsonc`                     | Cloudflare's current declarative mechanism (2026-06-30).                         |
-| No CLI pattern                               | `apps/cli` with commands/services/clients/storage | Same layering as the API, adapted to a process instead of a request.             |
+This repo follows `stack-standards` v2 (Hono + Zod + typed `di.ts`, Durable Object SQLite per entity, CLI layering). Deviations:
+
+| Standard                         | Here                                                                  | Why                                                                               |
+| -------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
+| `packages/shared`                | `packages/protocol`                                                   | The package is the wire protocol shared by the API and the CLI; the name says so. |
+| Success responses use `{ data }` | `GET /raw/*path` and `GET /v1/blobs/:sha256/content` stream raw bytes | File contents are streamed from R2 without buffering or wrapping.                 |
+| `/api` prefix behind a web app   | `/v1` on its own Worker                                               | There is no web app; clients are the CLI and other devices.                       |
 
 ## Repository
 
