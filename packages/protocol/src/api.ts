@@ -1,6 +1,6 @@
 import { z } from "zod";
-import { BatchId, DeviceId, Seq, Sha256, VaultId } from "./ids.js";
-import { VaultPath } from "./path.js";
+import { BatchId, DeviceId, Seq, Sha256, VaultId } from "./ids.ts";
+import { VaultPath } from "./path.ts";
 
 /** Largest body sent in a single PUT. Zones on Free/Pro reject request bodies over 100 MB. */
 export const SINGLE_PUT_MAX_BYTES = 90 * 1024 * 1024;

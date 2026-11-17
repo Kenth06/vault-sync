@@ -1,3 +1,3 @@
-export * from "./ids.js";
-export * from "./path.js";
-export * from "./api.js";
+export * from "./ids.ts";
+export * from "./path.ts";
+export * from "./api.ts";

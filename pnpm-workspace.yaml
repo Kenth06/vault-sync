@@ -17,3 +17,4 @@ minimumReleaseAgeExclude:
   - miniflare@5.20261117.0-beta
   - workerd@1.20261117.1
   - wrangler@4.164.0
+  - ignore@7.0.16

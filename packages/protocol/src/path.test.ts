@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import { normalizeVaultPath } from "./path.js";
-import { parseToken } from "./ids.js";
+import { normalizeVaultPath } from "./path.ts";
+import { parseToken } from "./ids.ts";
 
 describe("normalizeVaultPath", () => {
   it("normalizes NFD to NFC and backslashes to slashes", () => {

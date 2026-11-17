@@ -48,7 +48,7 @@
     },
     {
       "files": ["apps/cli/**"],
-      "rules": { "no-console": "off" }
+      "rules": { "no-console": "off", "no-await-in-loop": "off" }
     }
   ]
 }
