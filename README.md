@@ -43,6 +43,14 @@ node src/main.ts watch <vault-dir>
 
 `VAULTSYNC_ADMIN_SECRET` skips the admin secret prompt.
 
+### Obsidian plugin
+
+```sh
+pnpm --filter @vault-sync/obsidian-plugin build
+```
+
+Copy `apps/obsidian-plugin/dist/main.js` and `manifest.json` into `<vault>/.obsidian/plugins/vault-sync/`, enable **Vault Sync** under Settings → Community plugins, enter the Worker URL and vault id, and press **Connect…** (asks for the admin secret once). Requires Obsidian 1.11.4 or later. The device token lives in Obsidian's secret storage, and the plugin's `data.json` and `state.json` are never synced.
+
 Deploy:
 
 ```sh

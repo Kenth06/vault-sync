@@ -33,7 +33,9 @@ apps/
       storage/                 local SQLite state, vault config + OS keychain, ignore file
       common/                  constants, types, errors
       utils/                   pure: diff, remote-delta, pull-plan, conflict-name, ignore rules, formatting
+  obsidian-plugin/             Obsidian plugin: adapters over app.vault.adapter and requestUrl, settings, live updates
 packages/
+  sync-core/                   sync engine behind the LocalFiles, Remote and SyncStore ports (used by the CLI and the plugin)
   protocol/                    Zod contracts shared by api and cli: <domain>.schema.ts, ids, path, limits
   typescript-config/           base.json
 docs/                          costs.md, decisions.md
