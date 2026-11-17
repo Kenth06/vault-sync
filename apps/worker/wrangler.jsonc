@@ -1,0 +1,25 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vault-sync",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-11-17",
+  "compatibility_flags": ["nodejs_compat"],
+  "observability": { "enabled": true, "head_sampling_rate": 1 },
+
+  "durable_objects": {
+    "bindings": [{ "name": "VAULT", "class_name": "VaultDO" }]
+  },
+  // Declarative class lifecycle (replaces the legacy `migrations` array; the two cannot be mixed).
+  "exports": {
+    "VaultDO": { "type": "durable-object", "storage": "sqlite" }
+  },
+
+  "r2_buckets": [{ "binding": "BUCKET", "bucket_name": "vault-sync" }],
+
+  // Drizzle migrations are bundled as text and applied inside the DO constructor.
+  "rules": [{ "type": "Text", "globs": ["**/*.sql"], "fallthrough": true }]
+
+  // Secrets (not in this file):
+  //   wrangler secret put ADMIN_SECRET      — only used to enroll devices
+  // Local dev: copy .dev.vars.example to .dev.vars
+}

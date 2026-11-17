@@ -1,0 +1,54 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "unicorn", "oxc", "import", "promise", "node", "vitest"],
+  "categories": {
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error",
+    "pedantic": "error"
+  },
+  "ignorePatterns": ["**/drizzle/**", "**/worker-configuration.d.ts", "**/dist/**", "**/.wrangler/**"],
+  "rules": {
+    "no-inline-comments": "error",
+    "no-warning-comments": "error",
+    "typescript/ban-ts-comment": "error",
+    "vitest/no-commented-out-tests": "error",
+
+    "complexity": ["error", 10],
+    "max-depth": ["error", 3],
+    "max-params": ["error", 4],
+    "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
+    "max-lines-per-function": ["error", { "max": 60, "skipBlankLines": true, "skipComments": true }],
+
+    "eqeqeq": "error",
+    "no-var": "error",
+    "prefer-const": "error",
+    "no-console": ["error", { "allow": ["error", "warn"] }],
+    "typescript/no-explicit-any": "error",
+    "typescript/no-non-null-assertion": "error",
+    "typescript/consistent-type-imports": "error",
+    "import/no-cycle": "error",
+    "import/no-default-export": "off",
+    "unicorn/prefer-node-protocol": "error",
+
+    "no-redeclare": "off",
+    "unicorn/no-null": "off",
+    "unicorn/no-array-callback-reference": "off",
+    "unicorn/no-array-reduce": "off",
+    "import/max-dependencies": "off",
+    "sort-imports": "off"
+  },
+  "overrides": [
+    {
+      "files": ["**/*.test.ts", "**/test/**"],
+      "rules": {
+        "max-lines-per-function": "off",
+        "no-magic-numbers": "off"
+      }
+    },
+    {
+      "files": ["apps/cli/**"],
+      "rules": { "no-console": "off" }
+    }
+  ]
+}
