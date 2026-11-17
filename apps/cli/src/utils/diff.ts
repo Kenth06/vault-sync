@@ -15,15 +15,15 @@ export function diffTrees(local: ReadonlyMap<string, FileMeta>, synced: Readonly
     if (target) {
       const [newPath, meta] = target;
       added.delete(newPath);
-      renames.push(Change.parse({ op: "rename", path: newPath, fromPath, ...meta }));
+      renames.push(Change.parse({ op: "rename", path: newPath, fromPath, ...meta, baseHash: null }));
     } else {
-      deletes.push(Change.parse({ op: "delete", path: fromPath }));
+      deletes.push(Change.parse({ op: "delete", path: fromPath, baseHash: old.hash }));
     }
   }
 
   const puts = changed
     .filter(([p]) => synced.has(p) || added.has(p))
-    .map(([p, meta]) => Change.parse({ op: "put", path: p, ...meta }));
+    .map(([p, meta]) => Change.parse({ op: "put", path: p, ...meta, baseHash: synced.get(p)?.hash ?? null }));
 
   return [...renames, ...puts, ...deletes];
 }

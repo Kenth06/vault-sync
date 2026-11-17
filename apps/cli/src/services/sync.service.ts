@@ -1,52 +1,59 @@
-import { randomUUID } from "node:crypto";
-
-import { BatchId, Seq, type Change } from "@vault-sync/protocol";
+import { CommitConflicts } from "@vault-sync/protocol";
 
 import { ApiClient } from "../clients/api.client.ts";
-import type { LocalFile, SyncReport, VaultContext } from "../common/types.ts";
-import { loadIgnore } from "../storage/ignore-file.ts";
+import { ApiError } from "../common/errors.ts";
+import type { SyncReport, VaultContext } from "../common/types.ts";
 import type { LocalState } from "../storage/local-state.ts";
-import { diffTrees, toBatches } from "../utils/diff.ts";
-import { scanVault } from "./scan.service.ts";
-import { uploadMissing } from "./upload.service.ts";
+import { pullOnce } from "./pull.service.ts";
+import { pushOnce, type PushReport } from "./push.service.ts";
 
-interface BatchContext {
-  readonly client: ApiClient;
-  readonly ctx: VaultContext;
-  readonly state: LocalState;
-  readonly byHash: ReadonlyMap<string, LocalFile>;
+function isStaleBase(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "ERR_CONFLICT" && CommitConflicts.safeParse(error.details).success;
 }
 
-function indexByHash(files: ReadonlyMap<string, LocalFile>): Map<string, LocalFile> {
-  return new Map([...files.values()].map((f) => [f.hash, f]));
-}
-
-async function pushBatch(batch: BatchContext, changes: Change[]): Promise<number> {
-  const { client, ctx, state, byHash } = batch;
-  const { vaultId } = ctx.config;
-  const baseCursor = Seq.parse(state.cursor());
-  const plan = await client.plan(vaultId, { baseCursor, changes });
-  await uploadMissing(client, plan.missing, byHash);
-  const result = await client.commit(vaultId, { batchId: BatchId.parse(randomUUID()), baseCursor, changes });
-  state.applyCommitted(changes, result.cursor);
-  return result.cursor;
+async function pushWithRebase(
+  client: ApiClient,
+  ctx: VaultContext,
+  state: LocalState,
+): Promise<{ push: PushReport; conflicts: string[] }> {
+  try {
+    return { push: await pushOnce(client, ctx, state), conflicts: [] };
+  } catch (error) {
+    if (!isStaleBase(error)) throw error;
+    const pulled = await pullOnce(client, ctx, state);
+    return { push: await pushOnce(client, ctx, state), conflicts: pulled.conflicts };
+  }
 }
 
 export async function syncOnce(ctx: VaultContext, state: LocalState): Promise<SyncReport> {
-  const files = await scanVault(ctx.root, await loadIgnore(ctx.root), state);
-  const changes = diffTrees(files, state.synced());
-  const batches = toBatches(changes);
-  const context: BatchContext = {
-    client: new ApiClient(ctx.config.url, ctx.token),
-    ctx,
-    state,
-    byHash: indexByHash(files),
-  };
-
-  let cursor = state.cursor();
-  for (const batch of batches) cursor = await pushBatch(context, batch);
+  const client = new ApiClient(ctx.config.url, ctx.token);
+  const pulled = await pullOnce(client, ctx, state);
+  const { push, conflicts } = await pushWithRebase(client, ctx, state);
 
   state.setMeta("lastSyncAt", new Date().toISOString());
   state.setMeta("lastError", "");
-  return { changes: changes.length, batches: batches.length, cursor };
+  return {
+    pulled: pulled.applied,
+    pushed: push.changes,
+    batches: push.batches,
+    conflicts: [...pulled.conflicts, ...conflicts],
+    failed: pulled.failed,
+    cursor: state.cursor(),
+  };
+}
+
+export function pushOnly(ctx: VaultContext, state: LocalState): Promise<PushReport> {
+  return pushOnce(new ApiClient(ctx.config.url, ctx.token), ctx, state);
+}
+
+export async function pullOnly(ctx: VaultContext, state: LocalState): Promise<SyncReport> {
+  const pulled = await pullOnce(new ApiClient(ctx.config.url, ctx.token), ctx, state);
+  return {
+    pulled: pulled.applied,
+    pushed: 0,
+    batches: 0,
+    conflicts: pulled.conflicts,
+    failed: pulled.failed,
+    cursor: pulled.cursor,
+  };
 }

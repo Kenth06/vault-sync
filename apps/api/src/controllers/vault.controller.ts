@@ -10,6 +10,8 @@ import { rawFileParamSchema } from "../schemas/vault.schema.ts";
 export const vaultController = new Hono<DeviceEnv>()
   .use("/:vaultId/*", requireDevice, requireOwnVault)
 
+  .get("/:vaultId/ws", (c) => c.var.container.vaultService.connect(c.var.auth, c.req.raw))
+
   .get("/:vaultId/status", async (c) => {
     const data = await c.var.container.vaultService.status(c.var.auth);
     return c.json({ data });

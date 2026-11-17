@@ -51,6 +51,20 @@ async function listVaultPaths(root: string, isIgnored: IgnoreFn): Promise<Map<st
   return paths;
 }
 
+export async function scanPaths(
+  root: string,
+  vaultPaths: Iterable<string>,
+  state: LocalState,
+): Promise<Map<string, LocalFile>> {
+  const files = new Map<string, LocalFile>();
+  for (const vaultPath of vaultPaths) {
+    const absPath = path.join(root, vaultPath);
+    const meta = await hashWithCache(state, vaultPath, absPath).catch(() => null);
+    if (meta) files.set(vaultPath, { ...meta, path: vaultPath, absPath });
+  }
+  return files;
+}
+
 export async function scanVault(root: string, isIgnored: IgnoreFn, state: LocalState): Promise<Map<string, LocalFile>> {
   const files = new Map<string, LocalFile>();
   for (const [vaultPath, absPath] of await listVaultPaths(root, isIgnored)) {

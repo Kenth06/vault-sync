@@ -2,7 +2,7 @@
 
 Backs up an Obsidian vault to your own Cloudflare account. A daemon on the PC that holds the vault pushes every change to a Worker. The Worker stores the bytes in R2 (content-addressed by SHA-256) and the vault index in one SQLite Durable Object per vault.
 
-v1 is a one-way push from the source PC plus restore. Multi-device sync is phase F3.
+Several devices can edit the same vault: each pulls the others' changes, live over a WebSocket, and concurrent edits to one note keep both versions.
 
 ## Status
 
@@ -11,7 +11,7 @@ v1 is a one-way push from the source PC plus restore. Multi-device sync is phase
 | F0    | Monorepo, shared protocol, API skeleton, enroll | done  |
 | F1    | plan → upload → commit, multipart, CLI daemon   | done  |
 | F2    | Snapshots, GC, restore, log, revoke             | done  |
-| F3    | Pull, hibernated WebSocket, conflicts           | next  |
+| F3    | Pull, hibernated WebSocket, conflicts           | done  |
 
 ## Setup
 
@@ -32,7 +32,9 @@ node src/main.ts watch <vault-dir>
 | Command                                     | What it does                                                      |
 | ------------------------------------------- | ----------------------------------------------------------------- |
 | `init <dir> --url --vault-id`               | Enroll this device and link a vault (admin secret)                |
-| `push [dir]` / `watch [dir]`                | Sync once / continuously                                          |
+| `sync [dir]`                                | Pull remote changes, then push local ones                         |
+| `watch [dir]`                               | Sync continuously; live updates from other devices over WebSocket |
+| `push [dir]` / `pull [dir]`                 | One direction only                                                |
 | `status [dir]`                              | Local vs remote cursor, last sync, last error                     |
 | `log <path> [dir]`                          | Versions of a file; `--version <seq> [--out <file>]` recovers one |
 | `snapshots [dir]`                           | List snapshots; `--create` takes one now                          |

@@ -30,7 +30,9 @@ describe("diffTrees", () => {
   });
 
   it("deletes paths that vanished without a matching new file", () => {
-    expect(diffTrees(new Map(), new Map([["gone.md", meta("a")]]))).toEqual([{ op: "delete", path: "gone.md" }]);
+    expect(diffTrees(new Map(), new Map([["gone.md", meta("a")]]))).toEqual([
+      { op: "delete", path: "gone.md", baseHash: meta("a").hash },
+    ]);
   });
 
   it("returns nothing when trees match", () => {

@@ -24,6 +24,7 @@ import { batches, changes, files, type BatchRow, type ChangeInsert, type FileRow
 import type { BlobStore } from "./blob.store.ts";
 import { chunk, type Db, type TransactionSync } from "./db.ts";
 import type { DeviceStore } from "./device.store.ts";
+import { staleChanges, type LiveState } from "./stale-changes.ts";
 
 type LogEntry = Omit<ChangeInsert, "deviceId" | "batchId" | "at">;
 type Record = (entry: LogEntry) => number;
@@ -64,6 +65,10 @@ function toChangeRow(r: typeof changes.$inferSelect): ChangeRow {
     at: r.at,
   };
 }
+
+export type CommitOutcome =
+  | { readonly ok: true; readonly result: CommitResponse }
+  | { readonly ok: false; readonly conflicts: Conflict[] };
 
 export interface ManifestDependencies {
   readonly db: Db;
@@ -113,10 +118,13 @@ export class ManifestStore {
     return row ? this.batchResult(row, true) : null;
   }
 
-  commit(deviceId: DeviceId, req: CommitRequest, now: number): CommitResponse {
-    return this.transactionSync(() => {
+  commit(deviceId: DeviceId, req: CommitRequest, now: number): CommitOutcome {
+    return this.transactionSync((): CommitOutcome => {
       const replay = this.findBatch(req.batchId);
-      if (replay) return replay;
+      if (replay) return { ok: true, result: replay };
+
+      const conflicts = staleChanges(req.changes, (path) => this.liveState(path), this.cursor());
+      if (conflicts.length > 0) return { ok: false, conflicts };
 
       const seqs: number[] = [];
       const record: Record = (entry) => {
@@ -134,7 +142,7 @@ export class ManifestStore {
       const row: BatchRow = { batchId: req.batchId, seqFrom: seqs.at(0) ?? null, seqTo: seqs.at(-1) ?? null, at: now };
       this.db.insert(batches).values(row).run();
       this.devices.setCursor(deviceId, this.cursor());
-      return this.batchResult(row, false);
+      return { ok: true, result: this.batchResult(row, false) };
     });
   }
 
@@ -279,6 +287,11 @@ export class ManifestStore {
     }
     this.upsertFile({ path: c.path, hash: c.hash, size: c.size, mtime: c.mtime, seq });
     if (target?.hash != null) this.blobs.dropRef(target.hash, { seq, now: ctx.now });
+  }
+
+  private liveState(path: string): LiveState | undefined {
+    const r = this.liveFile(path);
+    return r?.hash == null ? undefined : { hash: r.hash, seq: r.seq };
   }
 
   private liveFile(path: string): FileRow | undefined {

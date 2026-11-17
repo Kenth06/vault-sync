@@ -2,6 +2,7 @@ export * from "./blob.schema.ts";
 export * from "./change.schema.ts";
 export * from "./device.schema.ts";
 export * from "./envelope.schema.ts";
+export * from "./events.schema.ts";
 export * from "./ids.ts";
 export * from "./limits.ts";
 export * from "./path.ts";

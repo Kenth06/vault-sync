@@ -26,7 +26,10 @@ export interface LocalFile extends FileMeta {
 }
 
 export interface SyncReport {
-  readonly changes: number;
+  readonly pulled: number;
+  readonly pushed: number;
   readonly batches: number;
+  readonly conflicts: string[];
+  readonly failed: string[];
   readonly cursor: number;
 }

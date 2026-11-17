@@ -14,6 +14,10 @@ Target plan: Workers Paid (USD 5/month base). Free-plan limits (10 ms CPU, 50 su
 
 The biggest lever is the client: the daemon debounces (~2 s), batches up to 500 changes / 50 MB and backs off on errors. A regression there multiplies every line above.
 
+Live updates use hibernatable WebSockets: an idle connection costs no DO duration, the 30 s `ping` is answered by the runtime without waking the object, and the broadcast runs inside the commit that already woke it.
+
+Every sync starts with one `/changes` request (one DO request), even when nothing changed, and files written by a pull trigger the local watcher once more. Both stay far below the rate limit.
+
 `GET /tree?at=<seq>` scans the change log up to `seq`, so its cost grows with the log until compaction exists; the live tree (`/tree` without `at`) reads only the `files` table.
 
 A per-device rate limit (600 requests/minute, `RATE_LIMIT_PER_MINUTE` in `apps/api/src/common/constants.ts`) cuts off a runaway client before it costs real money.

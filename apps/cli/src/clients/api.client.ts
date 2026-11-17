@@ -90,6 +90,11 @@ export class ApiClient {
     return withRetry(() => this.send("GET", `/v1/vaults/${vaultId}/tree${query}`, TreeResponse));
   }
 
+  changes(vaultId: VaultId, since: number, limit: number): Promise<ChangeRow[]> {
+    const url = `/v1/vaults/${vaultId}/changes?since=${since}&limit=${limit}`;
+    return withRetry(() => this.send("GET", url, ChangeRow.array()));
+  }
+
   history(vaultId: VaultId, path: string): Promise<ChangeRow[]> {
     const url = `/v1/vaults/${vaultId}/history?path=${encodeURIComponent(path)}`;
     return withRetry(() => this.send("GET", url, ChangeRow.array()));

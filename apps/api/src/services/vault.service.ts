@@ -58,6 +58,10 @@ export class VaultService extends BaseService {
     return { entry, body: object.body, size: object.size };
   }
 
+  connect(auth: DeviceAuth, request: Request): Promise<Response> {
+    return this.vault(auth.vaultId).fetch(request);
+  }
+
   async snapshots(auth: DeviceAuth): Promise<SnapshotInfo[]> {
     return this.unwrap(await this.vault(auth.vaultId).listSnapshots(auth.token));
   }

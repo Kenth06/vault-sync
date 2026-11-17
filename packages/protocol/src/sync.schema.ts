@@ -39,3 +39,13 @@ export const CommitResponse = z.object({
   replayed: z.boolean(),
 });
 export type CommitResponse = z.infer<typeof CommitResponse>;
+
+export const CommitConflicts = z.object({
+  conflicts: z.array(Conflict).min(1),
+});
+export type CommitConflicts = z.infer<typeof CommitConflicts>;
+
+export const MissingBlobs = z.object({
+  missing: z.array(Sha256).min(1),
+});
+export type MissingBlobs = z.infer<typeof MissingBlobs>;

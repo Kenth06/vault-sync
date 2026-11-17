@@ -16,12 +16,19 @@ import {
   type SnapshotInfo,
   type TreeEntry,
   type TreeResponse,
+  type VaultEvent,
   type VaultStatus,
+  WS_PING,
+  WS_PONG,
+  WS_PROTOCOL,
+  tokenFromProtocols,
+  type ErrorCode,
 } from "@vault-sync/protocol";
 import { retryable } from "cloudflare:durable-objects";
 import { DurableObject } from "cloudflare:workers";
 import { drizzle } from "drizzle-orm/durable-sqlite";
 import { migrate } from "drizzle-orm/durable-sqlite/migrator";
+import { z } from "zod";
 
 import migrations from "../../drizzle/migrations/migrations.js";
 import {
@@ -42,6 +49,19 @@ import { SnapshotStore, type SnapshotRecord } from "./stores/snapshot.store.ts";
 import { VaultMaintenance } from "./vault.maintenance.ts";
 
 type Authed<T> = (deviceId: DeviceId) => RpcResult<T> | Promise<RpcResult<T>>;
+
+const WS_CLOSE_REVOKED = 4001;
+const WS_CLOSE_POLICY = 1008;
+const UPGRADE_STATUS: Partial<Record<ErrorCode, number>> = { ERR_FORBIDDEN: 403, ERR_RATE_LIMITED: 429 };
+const RetryDetails = z.object({ retryAfterMs: z.number().nonnegative() });
+
+function upgradeRefused(failure: { code: ErrorCode; message: string; details?: unknown }): Response {
+  const retry = RetryDetails.safeParse(failure.details);
+  const headers = new Headers();
+  if (retry.success) headers.set("Retry-After", String(Math.ceil(retry.data.retryAfterMs / 1000)));
+  return new Response(failure.message, { status: UPGRADE_STATUS[failure.code] ?? 401, headers });
+}
+const WS_CLOSE_GOING_AWAY = 1001;
 
 function gcGraceMs(env: Env): number {
   const parsed = Number(env.GC_GRACE_MS);
@@ -72,6 +92,7 @@ export class VaultDO extends DurableObject<Env> {
       blobs: this.blobs,
       devices: this.devices,
     });
+    ctx.setWebSocketAutoResponse(new WebSocketRequestResponsePair(WS_PING, WS_PONG));
     void ctx.blockConcurrencyWhile(async () => {
       await migrate(db, migrations);
     });
@@ -94,7 +115,36 @@ export class VaultDO extends DurableObject<Env> {
   }
 
   revokeDevice(deviceId: DeviceId): RpcResult<{ revoked: true }> {
-    return this.devices.revoke(deviceId) ? ok({ revoked: true }) : fail("ERR_NOT_FOUND", "no such device");
+    if (!this.devices.revoke(deviceId)) return fail("ERR_NOT_FOUND", "no such device");
+    for (const ws of this.ctx.getWebSockets(deviceId)) ws.close(WS_CLOSE_REVOKED, "device revoked");
+    return ok({ revoked: true });
+  }
+
+  override async fetch(request: Request): Promise<Response> {
+    if (request.headers.get("Upgrade") !== "websocket") return new Response("expected websocket", { status: 426 });
+    const token = tokenFromProtocols(request.headers.get("Sec-WebSocket-Protocol")) ?? "";
+    const auth = await this.authed(token, (deviceId) => ok(deviceId));
+    if (!auth.ok) return upgradeRefused(auth);
+    const pair = new WebSocketPair();
+    const client = pair[0];
+    const server = pair[1];
+    this.ctx.acceptWebSocket(server, [auth.value]);
+    return new Response(null, { status: 101, webSocket: client, headers: { "Sec-WebSocket-Protocol": WS_PROTOCOL } });
+  }
+
+  override webSocketMessage(ws: WebSocket): void {
+    ws.close(WS_CLOSE_POLICY, "clients only send ping");
+  }
+
+  private broadcast(event: VaultEvent): void {
+    const message = JSON.stringify(event);
+    for (const ws of this.ctx.getWebSockets()) {
+      try {
+        ws.send(message);
+      } catch {
+        ws.close(WS_CLOSE_GOING_AWAY, "send failed");
+      }
+    }
   }
 
   authorize(token: string): Promise<RpcResult<{ deviceId: DeviceId }>> {
@@ -124,8 +174,14 @@ export class VaultDO extends DurableObject<Env> {
       const missing = await this.registerFromR2(hashesOf(req.changes));
       if (missing.length > 0) return fail("ERR_CONFLICT", "blobs not uploaded", { missing });
 
-      const result = this.manifest.commit(deviceId, req, Date.now());
-      if (result.seqTo !== null) await this.ensureAlarm(Date.now() + SNAPSHOT_INTERVAL_MS);
+      const outcome = this.manifest.commit(deviceId, req, Date.now());
+      if (!outcome.ok)
+        return fail("ERR_CONFLICT", "changed on the server since your base", { conflicts: outcome.conflicts });
+      const { result } = outcome;
+      if (result.seqTo !== null && !result.replayed) {
+        this.broadcast({ type: "changed", cursor: result.cursor, deviceId });
+        await this.ensureAlarm(Date.now() + SNAPSHOT_INTERVAL_MS);
+      }
       return ok(result);
     });
   }

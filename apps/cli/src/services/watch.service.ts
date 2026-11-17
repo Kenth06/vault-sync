@@ -3,6 +3,10 @@ import path from "node:path";
 import { normalizeVaultPath } from "@vault-sync/protocol";
 import { watch } from "chokidar";
 
+import { ApiClient } from "../clients/api.client.ts";
+import { LiveConnection } from "../clients/live.client.ts";
+import { REMOTE_CHANGE_DEBOUNCE_MS } from "../common/constants.ts";
+import { ApiError } from "../common/errors.ts";
 import type { SyncReport, VaultContext } from "../common/types.ts";
 import { loadIgnore } from "../storage/ignore-file.ts";
 import type { LocalState } from "../storage/local-state.ts";
@@ -13,6 +17,14 @@ import { syncOnce } from "./sync.service.ts";
 export interface WatchHooks {
   onSynced: (report: SyncReport) => void;
   onError: (error: unknown, retryInMs: number) => void;
+  onStatus: (message: string) => void;
+}
+
+const UNAUTHORIZED = 401;
+const FORBIDDEN = 403;
+
+function isAccessDenied(error: unknown): boolean {
+  return error instanceof ApiError && (error.status === UNAUTHORIZED || error.status === FORBIDDEN);
 }
 
 function watcherFilter(root: string, isIgnored: IgnoreFn): (absPath: string) => boolean {
@@ -42,8 +54,22 @@ export async function watchVault(
   watcher.on("all", () => {
     loop.schedule();
   });
+  const client = new ApiClient(ctx.config.url, ctx.token);
+  const live = new LiveConnection(ctx, {
+    onRemoteChange: () => {
+      loop.schedule(REMOTE_CHANGE_DEBOUNCE_MS);
+    },
+    onStatus: hooks.onStatus,
+    stillAllowed: () =>
+      client.status(ctx.config.vaultId).then(
+        () => true,
+        (error: unknown) => !isAccessDenied(error),
+      ),
+  });
+  live.start();
   await loop.run();
   return async () => {
+    live.stop();
     loop.stop();
     await watcher.close();
   };

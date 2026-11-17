@@ -2,6 +2,30 @@
 
 Short records of choices that are not obvious from the code. Source files carry no comments, so the reasons live here. Newest first.
 
+## 2026-11-17 — Optimistic concurrency with baseHash
+
+Every change a client pushes carries `baseHash`: the hash this device last synced for that path (`null` when it believes the path is absent). The commit compares it with the server's current hash inside the same transaction and rejects the whole batch with `ERR_CONFLICT` and `{ conflicts }` if any differs, so a commit never overwrites a version its author has not seen. A rename also requires its source to still hold the moved bytes. Changes without `baseHash` (older clients) are accepted as before. A batch may touch each path only once, so the check against pre-batch state is unambiguous.
+
+## 2026-11-17 — Pull, then push; conflicts become copies
+
+`sync` pulls first, then pushes. Pull reads `/changes` from the local cursor, reduces it to the latest remote state per path, and compares remote, last-synced and on-disk hashes for each path. Untouched local files take the remote version. Files changed on both sides keep the server version at the original path and move the local version to `<name> (conflicto <host> <YYYY-MM-DD HHmm>).<ext>`, which the next push uploads as a new file. A file deleted remotely but edited locally is kept, and a file deleted locally but edited remotely is written back (an edit beats a delete). When a push is rejected for a stale base, the client pulls and retries once.
+
+Pull never overwrites unseen local work: right before replacing or deleting a file it compares size and mtime with a snapshot taken before the download, and if the file changed it moves it to a conflict copy first. Conflict copies get a numeric suffix when the name is taken. Paths excluded by `.vaultsyncignore`, anything under `.vaultsync/`, temporary download files and names Windows cannot store are never written. On case-insensitive filesystems (Windows, macOS) a case-only rename is applied as a rename, not as write-then-delete. A remote change whose blob is gone is skipped and reported; any other failure leaves the cursor where it was so the next sync retries. Every version also stays in the server history.
+
+Renames arriving from another device reuse the local bytes (copy, then delete) instead of downloading them again.
+
+## 2026-11-17 — Cursor advances only over contiguous commits
+
+After a push the client moves its cursor to the batch's last sequence only if the batch started right after the cursor. Otherwise another device committed in between and the next pull must fetch those changes; the client's own changes come back in that pull and are adopted without touching disk.
+
+## 2026-11-17 — Live updates over a hibernatable WebSocket
+
+`GET /v1/vaults/:id/ws` upgrades to a WebSocket accepted with the Durable Object hibernation API and tagged with the device id. The token travels as a second `Sec-WebSocket-Protocol` value next to `vaultsync.v1`, because the WebSocket API cannot set headers; the server echoes only `vaultsync.v1`. Each commit broadcasts `{ type: "changed", cursor, deviceId }`; `watch` ignores its own events and schedules a sync 500 ms after a remote one. Clients send `ping` every 30 s and the runtime answers `pong` without waking the object. Revoking a device closes its sockets with code 4001. A connection that fails before opening triggers one authenticated status request; if that says the device is unauthorized or revoked, the client stops reconnecting. A rate-limited upgrade answers 429 with `Retry-After`. Reconnects back off exponentially with jitter, and the client closes a socket that misses two pongs. On every (re)connect the client syncs once, to catch up on commits made while it was offline.
+
+## 2026-11-17 — No invocation logs
+
+`observability.logs.invocation_logs` is off. Invocation logs can record request headers, and the WebSocket upgrade carries the device token in `Sec-WebSocket-Protocol`. The structured `console.*` logs the code writes stay on and never include tokens.
+
 ## 2026-11-17 — Blob keys are scoped per vault (spec deviation)
 
 The spec stored blobs under a global key so two vaults could share one PDF. Garbage collection makes that unsafe: each vault's Durable Object only knows its own references, so vault A's GC could delete bytes vault B still uses. Keys are now `vaults/<vaultId>/blobs/<ab>/<cd>/<hash>`. Cross-vault deduplication is lost, which matters little for one owner with one or two vaults; dedupe inside a vault (renames, copies, unchanged files) is unchanged. A global reference registry was the alternative and would add a second Durable Object to every commit.

@@ -28,11 +28,11 @@ apps/
     src/
       main.ts                  registers commands
       commands/                <name>.command.ts — parse args, call services, print
-      services/                scan, upload, sync, sync-loop, watch, restore
-      clients/                 api.client.ts — typed HTTP client with retry
+      services/                scan, upload, push, pull, sync, sync-loop, watch, restore
+      clients/                 api.client.ts (typed HTTP, retry, Retry-After), live.client.ts (WebSocket)
       storage/                 local SQLite state, vault config + OS keychain, ignore file
       common/                  constants, types, errors
-      utils/                   pure: diff, ignore rules, formatting
+      utils/                   pure: diff, remote-delta, pull-plan, conflict-name, ignore rules, formatting
 packages/
   protocol/                    Zod contracts shared by api and cli: <domain>.schema.ts, ids, path, limits
   typescript-config/           base.json
@@ -69,7 +69,8 @@ Dependency direction: `controllers|commands → services → (durable-objects | 
 - R2 keys are scoped per vault (`blobKey(vaultId, hash)`, `snapshotKey(vaultId, seq)`); GC relies on it.
 - Alarms are scheduled only when work exists, at most once a day (see `docs/decisions.md`).
 - DO methods return `RpcResult<T>`; `BaseService.unwrap` turns failures into `AppError`.
-- Commits are idempotent by `batchId`. Only idempotent methods go in the `retryable(...)` block.
+- Commits are idempotent by `batchId` and reject a stale `baseHash` atomically. Only idempotent methods go in the `retryable(...)` block.
+- WebSockets use the hibernation API only (`acceptWebSocket`, auto ping/pong); never `ws.accept()` in the Durable Object.
 
 ## Code rules
 

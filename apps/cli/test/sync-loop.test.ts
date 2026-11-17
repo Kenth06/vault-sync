@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { SyncReport } from "../src/common/types.ts";
 import { SyncLoop } from "../src/services/sync-loop.ts";
 
-const report: SyncReport = { changes: 0, batches: 0, cursor: 0 };
+const report: SyncReport = { pulled: 0, pushed: 0, batches: 0, conflicts: [], failed: [], cursor: 0 };
 
 function ignoreReport(_report: SyncReport): void {}
 function ignoreError(_error: unknown, _retryIn: number): void {}

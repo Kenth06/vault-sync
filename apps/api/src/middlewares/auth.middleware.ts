@@ -1,4 +1,4 @@
-import { parseToken } from "@vault-sync/protocol";
+import { parseToken, tokenFromProtocols } from "@vault-sync/protocol";
 import { createMiddleware } from "hono/factory";
 
 import { AppError } from "../common/errors.ts";
@@ -10,7 +10,10 @@ function bearer(header: string | undefined): string | null {
 }
 
 export const requireDevice = createMiddleware<DeviceEnv>(async (c, next) => {
-  const token = bearer(c.req.header("Authorization"));
+  const upgrade = c.req.header("Upgrade") === "websocket";
+  const token = upgrade
+    ? tokenFromProtocols(c.req.header("Sec-WebSocket-Protocol"))
+    : bearer(c.req.header("Authorization"));
   const parsed = token === null ? null : parseToken(token);
   if (token === null || parsed === null) throw new AppError("ERR_UNAUTHORIZED", "missing or malformed token");
   c.set("auth", { token, vaultId: parsed.vaultId });

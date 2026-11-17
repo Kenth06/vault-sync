@@ -80,6 +80,23 @@ export class LocalState {
     }
   }
 
+  applyPulled(updates: ReadonlyMap<string, FileMeta | null>, cursor: number): void {
+    const put = this.db.prepare("INSERT OR REPLACE INTO synced (path, hash, size, mtime) VALUES (?, ?, ?, ?)");
+    const del = this.db.prepare("DELETE FROM synced WHERE path = ?");
+    this.db.exec("BEGIN");
+    try {
+      for (const [vaultPath, meta] of updates) {
+        if (meta === null) del.run(vaultPath);
+        else put.run(vaultPath, meta.hash, meta.size, meta.mtime);
+      }
+      this.setMeta("cursor", String(Math.max(cursor, this.cursor())));
+      this.db.exec("COMMIT");
+    } catch (error) {
+      this.db.exec("ROLLBACK");
+      throw error;
+    }
+  }
+
   cursor(): number {
     return Number(this.getMeta("cursor") ?? 0);
   }
