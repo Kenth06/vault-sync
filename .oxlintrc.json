@@ -103,6 +103,26 @@
         "no-console": "off",
         "no-await-in-loop": "off"
       }
+    },
+    {
+      "files": ["apps/web/src/**"],
+      "plugins": ["react", "jsx-a11y"],
+      "rules": {
+        "import/no-unassigned-import": [
+          "error",
+          {
+            "allow": ["**/*.css"]
+          }
+        ],
+        "react/rules-of-hooks": "error",
+        "react/exhaustive-deps": "error",
+        "react/jsx-key": "error",
+        "react/no-danger": "off",
+        "jsx-a11y/anchor-is-valid": "error",
+        "jsx-a11y/alt-text": "error",
+        "react/react-in-jsx-scope": "off",
+        "react/jsx-filename-extension": "off"
+      }
     }
   ]
 }

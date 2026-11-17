@@ -9,6 +9,7 @@ import {
   type CommitRequest,
   type CommitResponse,
   type DeviceInfo,
+  type DeviceSummary,
   type EnrollResponse,
   type PlanRequest,
   type PlanResponse,
@@ -160,6 +161,14 @@ export class VaultDO extends DurableObject<Env> {
         deviceCursor: Seq.parse(this.devices.find(deviceId)?.cursor ?? 0),
       }),
     );
+  }
+
+  deviceSummaries(token: string): Promise<RpcResult<DeviceSummary[]>> {
+    return this.authed(token, () => ok(this.devices.list().map(({ id, name, lastSeen }) => ({ id, name, lastSeen }))));
+  }
+
+  revokeSelf(token: string): Promise<RpcResult<{ revoked: true }>> {
+    return this.authed(token, (deviceId) => this.revokeDevice(deviceId));
   }
 
   plan(token: string, req: PlanRequest): Promise<RpcResult<PlanResponse>> {

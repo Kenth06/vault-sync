@@ -34,6 +34,10 @@ apps/
       common/                  constants, types, errors
       utils/                   pure: diff, remote-delta, pull-plan, conflict-name, ignore rules, formatting
   obsidian-plugin/             Obsidian plugin: adapters over app.vault.adapter and requestUrl, settings, live updates
+  web/                         read-only viewer: React 19 + Vite + Kumo, served by its own Worker
+    worker/                    Hono: /api/session (HttpOnly cookie), allowlist proxy /api/* → API over a service binding
+    src/                       app/ (routes), components/, contexts/, hooks/, lib/ (client/http/api.ts is the only fetch, markdown, tree)
+    public/_headers            CSP and security headers for static assets
 packages/
   sync-core/                   sync engine behind the LocalFiles, Remote and SyncStore ports (used by the CLI and the plugin)
   protocol/                    Zod contracts shared by api and cli: <domain>.schema.ts, ids, path, limits
@@ -53,6 +57,8 @@ Dependency direction: `controllers|commands → services → (durable-objects | 
 - `pnpm knip` — unused files, exports and dependencies
 - `pnpm --filter @vault-sync/api cf-typegen` — after editing `wrangler.jsonc`
 - `pnpm --filter @vault-sync/api db:generate` — after editing `src/entities/`
+- `pnpm --filter @vault-sync/web cf-typegen` — after editing `apps/web/wrangler.jsonc`
+- `pnpm --filter @vault-sync/web deploy` — build and deploy the viewer (deploy the API first; the service binding needs it)
 
 ## API contract
 
@@ -94,11 +100,11 @@ Dependency direction: `controllers|commands → services → (durable-objects | 
 
 This repo follows `stack-standards` v2 (Hono + Zod + typed `di.ts`, Durable Object SQLite per entity, CLI layering). Deviations:
 
-| Standard                         | Here                                                                  | Why                                                                               |
-| -------------------------------- | --------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
-| `packages/shared`                | `packages/protocol`                                                   | The package is the wire protocol shared by the API and the CLI; the name says so. |
-| Success responses use `{ data }` | `GET /raw/*path` and `GET /v1/blobs/:sha256/content` stream raw bytes | File contents are streamed from R2 without buffering or wrapping.                 |
-| `/api` prefix behind a web app   | `/v1` on its own Worker                                               | There is no web app; clients are the CLI and other devices.                       |
+| Standard                         | Here                                                                  | Why                                                                                |
+| -------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
+| `packages/shared`                | `packages/protocol`                                                   | The package is the wire protocol shared by the API and the CLI; the name says so.  |
+| Success responses use `{ data }` | `GET /raw/*path` and `GET /v1/blobs/:sha256/content` stream raw bytes | File contents are streamed from R2 without buffering or wrapping.                  |
+| `/api` prefix behind a web app   | API keeps `/v1` on its own Worker; `apps/web` proxies `/api/*` to it  | The CLI and the plugin call the API directly; only the viewer goes through `/api`. |
 
 ## Repository
 

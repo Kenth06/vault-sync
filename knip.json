@@ -15,8 +15,13 @@
       "project": ["src/**/*.ts", "test/**/*.ts"]
     },
     "apps/obsidian-plugin": {
-      "entry": ["src/main.ts", "build.mjs"],
+      "entry": ["src/main.ts"],
       "project": ["src/**/*.ts", "test/**/*.ts"]
+    },
+    "apps/web": {
+      "project": ["src/**/*.{ts,tsx}", "worker/**/*.ts", "test/**/*.ts"],
+      "ignoreDependencies": ["@fontsource-variable/inter", "@fontsource/jetbrains-mono", "tailwindcss"],
+      "ignoreUnresolved": ["./worker-configuration.d.ts"]
     }
   }
 }

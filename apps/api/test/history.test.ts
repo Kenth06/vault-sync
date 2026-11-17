@@ -1,4 +1,4 @@
-import { ChangeRow, DeviceInfo, TreeResponse, type PutChange } from "@vault-sync/protocol";
+import { ChangeRow, DeviceInfo, DeviceSummary, TreeResponse, type PutChange } from "@vault-sync/protocol";
 import { describe, expect, it } from "vitest";
 
 import { ADMIN, call, enroll, json, putBlob, putChange, readData, readErrorCode } from "./helpers.ts";
@@ -87,6 +87,28 @@ describe("devices", () => {
 
     const after = await call(`/v1/vaults/${vault}/status`, { token });
     expect(after.status).toBe(403);
+    expect(await readErrorCode(after)).toBe("ERR_FORBIDDEN");
+  });
+});
+
+describe("device names for a vault member", () => {
+  it("lists ids and names without the admin secret, and only for the token's vault", async () => {
+    const { token } = await enroll("v-names", "laptop");
+    await enroll("v-names", "desktop");
+    const res = await call("/v1/vaults/v-names/devices", { token });
+    const names = (await readData(res, DeviceSummary.array())).map((d) => d.name);
+    expect(names).toEqual(["desktop", "laptop"]);
+
+    const other = await call("/v1/vaults/v-other/devices", { token });
+    expect(other.status).toBe(403);
+    expect((await call("/v1/vaults/v-names/devices")).status).toBe(401);
+  });
+
+  it("lets a device revoke itself, after which its token stops working", async () => {
+    const { token } = await enroll("v-self", "web");
+    const res = await call("/v1/vaults/v-self/devices/self/revoke", { method: "POST", token });
+    expect(res.status).toBe(200);
+    const after = await call("/v1/vaults/v-self/status", { token });
     expect(await readErrorCode(after)).toBe("ERR_FORBIDDEN");
   });
 });

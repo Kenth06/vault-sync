@@ -20,6 +20,8 @@ Every sync starts with one `/changes` request (one DO request), even when nothin
 
 `GET /tree?at=<seq>` scans the change log up to `seq`, so its cost grows with the log until compaction exists; the live tree (`/tree` without `at`) reads only the `files` table.
 
+The web viewer (`apps/web`) adds two Worker invocations per API call (the web Worker, then the API through the service binding) and one DO request, the same as a CLI call. Static assets are served without invoking the Worker. An open viewer tab holds one hibernated WebSocket and refetches status, tree and the open note's history once per remote commit; opening a note is two requests (content and history). Each sign-in enrolls one more device row.
+
 A per-device rate limit (600 requests/minute, `RATE_LIMIT_PER_MINUTE` in `apps/api/src/common/constants.ts`) cuts off a runaway client before it costs real money.
 
 ## Spend policies (configure once per account)

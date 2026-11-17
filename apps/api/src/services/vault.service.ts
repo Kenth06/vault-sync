@@ -5,6 +5,7 @@ import {
   type ChangesQuery,
   type CommitRequest,
   type CommitResponse,
+  type DeviceSummary,
   type HistoryQuery,
   type PlanRequest,
   type PlanResponse,
@@ -29,6 +30,14 @@ export interface FileContent {
 export class VaultService extends BaseService {
   async status(auth: DeviceAuth): Promise<VaultStatus> {
     return this.unwrap(await this.vault(auth.vaultId).status(auth.token));
+  }
+
+  async devices(auth: DeviceAuth): Promise<DeviceSummary[]> {
+    return this.unwrap(await this.vault(auth.vaultId).deviceSummaries(auth.token));
+  }
+
+  async revokeSelf(auth: DeviceAuth): Promise<void> {
+    this.unwrap(await this.vault(auth.vaultId).revokeSelf(auth.token));
   }
 
   async plan(auth: DeviceAuth, req: PlanRequest): Promise<PlanResponse> {

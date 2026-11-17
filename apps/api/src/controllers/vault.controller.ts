@@ -17,6 +17,16 @@ export const vaultController = new Hono<DeviceEnv>()
     return c.json({ data });
   })
 
+  .get("/:vaultId/devices", async (c) => {
+    const data = await c.var.container.vaultService.devices(c.var.auth);
+    return c.json({ data });
+  })
+
+  .post("/:vaultId/devices/self/revoke", async (c) => {
+    await c.var.container.vaultService.revokeSelf(c.var.auth);
+    return c.json({ data: { revoked: true } });
+  })
+
   .post("/:vaultId/plan", validate("json", PlanRequest), async (c) => {
     const data = await c.var.container.vaultService.plan(c.var.auth, c.req.valid("json"));
     return c.json({ data });

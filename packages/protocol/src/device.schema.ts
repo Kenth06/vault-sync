@@ -25,6 +25,9 @@ export const DeviceInfo = z.object({
 });
 export type DeviceInfo = z.infer<typeof DeviceInfo>;
 
+export const DeviceSummary = DeviceInfo.pick({ id: true, name: true, lastSeen: true });
+export type DeviceSummary = z.infer<typeof DeviceSummary>;
+
 export const VaultScope = z.object({ vaultId: VaultId });
 export type VaultScope = z.infer<typeof VaultScope>;
 

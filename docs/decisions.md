@@ -2,6 +2,28 @@
 
 Short records of choices that are not obvious from the code. Source files carry no comments, so the reasons live here. Newest first.
 
+## 2026-11-17 — Web viewer: token in an HttpOnly cookie, read-only proxy
+
+`apps/web` is a second Worker (static assets + a small Hono app) bound to the API with a service binding. Signing in posts the vault id and admin secret to `/api/session`; the web Worker enrolls a device named "Web viewer" and keeps its token in a `__Host-` cookie (`HttpOnly`, `Secure`, `SameSite=Strict`, 400 days). Page JavaScript never sees the token or the admin secret, so an XSS in a rendered note cannot steal it.
+
+The device token can commit, so the web Worker forwards only an allowlist (`apps/web/worker/routes.ts`): `GET` status, tree, history, changes, snapshots, devices, raw files, blob content and the WebSocket, plus `POST snapshots`. Plan, commit and uploads are refused before the API sees them. A server-side read-only role would be stricter; it needs a DO migration and is left for later. `hono/csrf` rejects cross-origin form writes on top of `SameSite=Strict`, and the WebSocket upgrade must carry the viewer's own `Origin`.
+
+Signing out calls `POST /v1/vaults/:vaultId/devices/self/revoke`, so each sign-in does not leave a live device behind. When the API answers 401 or 403 the web Worker deletes the cookie, and the client stops reconnecting the socket after five failed attempts that never opened. Live `changed` events are coalesced over 1.5 s before refetching.
+
+Links in rendered notes count as internal only by their shape (`/f/…`, not `//…`), never by a marker attribute a note could add.
+
+File bytes are served with `X-Content-Type-Options: nosniff`, `Content-Security-Policy: sandbox` and a type chosen from an allowlist of image extensions; everything else is `application/octet-stream` with `Content-Disposition: attachment`. An `.html` or `.svg` from the vault never runs as a same-origin page.
+
+Markdown is rendered with `marked` and sanitized with DOMPurify (no `style`, `form` or `iframe`). The page CSP (`public/_headers`) allows scripts, fonts and connections from `'self'` only. Vite's asset inlining is off (`assetsInlineLimit: 0`) so no `data:` fonts need allowing. Chrome reports a `script-src-attr` violation when DOMPurify parses a note that contains an inline handler; that is the CSP blocking it before DOMPurify removes it.
+
+## 2026-11-17 — Device names for vault members
+
+`GET /v1/vaults/:vaultId/devices` returns `{ id, name, lastSeen }` for every device of the vault, authorized by any device token of that vault. Members already see each other's device ids in the change log; the names make history readable ("Edited on Laptop"). Listing with revoke state and revoking still need the admin secret.
+
+## 2026-11-17 — Viewer bundle size
+
+The viewer ships one ~260 KB gzip chunk (Kumo, React DOM, React Router, Zod). It is a private tool opened by one person, so route splitting is not worth the extra requests yet; `chunkSizeWarningLimit` is raised to 900 KB instead.
+
 ## 2026-11-17 — Optimistic concurrency with baseHash
 
 Every change a client pushes carries `baseHash`: the hash this device last synced for that path (`null` when it believes the path is absent). The commit compares it with the server's current hash inside the same transaction and rejects the whole batch with `ERR_CONFLICT` and `{ conflicts }` if any differs, so a commit never overwrites a version its author has not seen. A rename also requires its source to still hold the moved bytes. Changes without `baseHash` (older clients) are accepted as before. A batch may touch each path only once, so the check against pre-batch state is unambiguous.
