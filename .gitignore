@@ -6,3 +6,5 @@ dist/
 .vaultsync/
 .claude/settings.local.json
 CLAUDE.local.md
+.turbo/
+*.tsbuildinfo

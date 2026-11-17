@@ -1,6 +1,6 @@
 ---
 name: do-cost-review
-description: Reviews a change for Durable Object and Workers billing impact (requests, duration, storage, R2 operations) against the vault-sync budget. Use when touching vault-do.ts, routes, alarms, the CLI sync loop, or before a deploy.
+description: Reviews a change for Durable Object and Workers billing impact (requests, duration, storage, R2 operations) against the vault-sync budget. Use when touching durable-objects/, services/, controllers/, alarms, the CLI sync loop, or before a deploy.
 allowed-tools: Read Grep Glob Bash(git diff *)
 ---
 
@@ -12,6 +12,6 @@ Durable Objects bill per request, per GB-second of active duration and per store
 4. **Alarms are scheduled only when work exists**, never as a heartbeat. `setAlarm` replaces the previous alarm.
 5. **No WebSocket without hibernation** (F3). A non-hibernated socket keeps the DO billed for as long as it is open.
 6. **The client is the biggest lever.** The daemon debounces (~2 s), batches up to 500 changes and backs off exponentially; a regression there multiplies every server-side cost.
-7. **Rate limit stays on.** `RATE_LIMIT_PER_MINUTE` in `vault-do.ts` cuts off runaway clients.
+7. **Rate limit stays on.** `RATE_LIMIT_PER_MINUTE` in `apps/api/src/common/constants.ts` cuts off runaway clients.
 
 Report each finding with file:line, the cost driver it affects, and the fix.

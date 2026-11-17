@@ -1,0 +1,9 @@
+{
+  "extends": "@vault-sync/typescript-config/base.json",
+  "compilerOptions": {
+    "types": ["./worker-configuration.d.ts", "@cloudflare/vitest-plugin/types"],
+    "allowJs": true,
+    "checkJs": false
+  },
+  "include": ["src", "test", "drizzle", "worker-configuration.d.ts"]
+}

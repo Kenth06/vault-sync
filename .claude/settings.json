@@ -2,19 +2,22 @@
   "$schema": "https://json.schemastore.org/claude-code-settings.json",
   "permissions": {
     "allow": [
+      "Bash(pnpm verify *)",
       "Bash(pnpm lint *)",
-      "Bash(pnpm typecheck *)",
+      "Bash(pnpm format *)",
+      "Bash(pnpm check-types *)",
       "Bash(pnpm test *)",
-      "Bash(pnpm --filter * typecheck)",
+      "Bash(pnpm knip *)",
+      "Bash(pnpm --filter * check-types)",
       "Bash(pnpm --filter * test)",
       "Bash(pnpm --filter * cf-typegen)",
       "Bash(pnpm --filter * db:generate)",
       "Bash(pnpm exec oxlint *)",
-      "Bash(pnpm exec eslint *)",
       "Bash(pnpm exec vitest *)",
       "Bash(pnpm exec tsc *)",
+      "PowerShell(pnpm verify *)",
       "PowerShell(pnpm lint *)",
-      "PowerShell(pnpm typecheck *)",
+      "PowerShell(pnpm check-types *)",
       "PowerShell(pnpm test *)"
     ],
     "ask": [
@@ -25,11 +28,7 @@
       "Bash(git push *)",
       "Bash(gh repo *)"
     ],
-    "deny": [
-      "Read(./**/.dev.vars)",
-      "Read(./**/.env)",
-      "Read(./**/.env.*)"
-    ]
+    "deny": ["Read(./**/.dev.vars)", "Read(./**/.env)", "Read(./**/.env.*)"]
   },
   "hooks": {
     "PostToolUse": [

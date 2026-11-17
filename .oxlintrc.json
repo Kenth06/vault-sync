@@ -7,7 +7,14 @@
     "perf": "error",
     "pedantic": "error"
   },
-  "ignorePatterns": ["**/drizzle/**", "**/worker-configuration.d.ts", "**/dist/**", "**/.wrangler/**"],
+  "ignorePatterns": [
+    "**/drizzle/migrations/**",
+    "**/worker-configuration.d.ts",
+    "**/dist/**",
+    "**/.wrangler/**",
+    "**/.turbo/**",
+    "**/*.d.ts"
+  ],
   "rules": {
     "no-inline-comments": "error",
     "no-warning-comments": "error",
@@ -20,34 +27,51 @@
     "max-lines": ["error", { "max": 300, "skipBlankLines": true, "skipComments": true }],
     "max-lines-per-function": ["error", { "max": 60, "skipBlankLines": true, "skipComments": true }],
 
-    "eqeqeq": "error",
+    "eqeqeq": ["error", "always", { "null": "ignore" }],
     "no-var": "error",
     "prefer-const": "error",
+    "no-else-return": "error",
     "no-console": ["error", { "allow": ["error", "warn"] }],
     "typescript/no-explicit-any": "error",
     "typescript/no-non-null-assertion": "error",
     "typescript/consistent-type-imports": "error",
+    "typescript/no-floating-promises": "error",
+    "typescript/no-misused-promises": "error",
+    "typescript/await-thenable": "error",
+    "typescript/no-unsafe-type-assertion": "error",
+    "typescript/switch-exhaustiveness-check": "error",
+    "typescript/no-unnecessary-condition": "error",
     "import/no-cycle": "error",
-    "import/no-default-export": "off",
+    "import/no-duplicates": "error",
     "unicorn/prefer-node-protocol": "error",
 
+    "typescript/prefer-readonly-parameter-types": "off",
     "no-redeclare": "off",
     "unicorn/no-null": "off",
     "unicorn/no-array-callback-reference": "off",
     "unicorn/no-array-reduce": "off",
     "import/max-dependencies": "off",
+    "import/no-default-export": "off",
     "sort-imports": "off"
   },
   "overrides": [
     {
-      "files": ["**/*.test.ts", "**/test/**"],
+      "files": ["**/test/**"],
+      "rules": { "max-lines-per-function": "off", "no-magic-numbers": "off" }
+    },
+    {
+      "files": ["**/*.mjs"],
       "rules": {
-        "max-lines-per-function": "off",
-        "no-magic-numbers": "off"
+        "typescript/no-unsafe-argument": "off",
+        "typescript/no-unsafe-assignment": "off",
+        "typescript/no-unsafe-call": "off",
+        "typescript/no-unsafe-member-access": "off",
+        "typescript/no-unsafe-return": "off",
+        "typescript/strict-boolean-expressions": "off"
       }
     },
     {
-      "files": ["apps/cli/**"],
+      "files": ["apps/cli/**", "scripts/**"],
       "rules": { "no-console": "off", "no-await-in-loop": "off" }
     }
   ]

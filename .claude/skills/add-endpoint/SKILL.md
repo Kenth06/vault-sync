@@ -1,19 +1,24 @@
 ---
 name: add-endpoint
-description: Adds or changes an HTTP endpoint in the vault-sync Worker end to end (protocol schema, VaultStore, VaultDO RPC, Hono route, test). Use when the API surface or a Durable Object method changes.
+description: Adds or changes an HTTP endpoint in the vault-sync API end to end (protocol schema, store, Durable Object RPC, service, controller, client, test). Use when the API surface or a Durable Object method changes.
 ---
 
-Every endpoint crosses the same five layers. Change them in this order so types flow forward and nothing compiles against a stale shape.
+Change the layers in this order so types flow forward and nothing compiles against a stale shape.
 
-1. **`packages/protocol/src/api.ts`** — request/response Zod schemas, exported as `const X` plus `type X = z.infer<typeof X>`. Use branded ids (`Sha256`, `VaultId`, `DeviceId`, `Seq`, `VaultPath`). New error cases go into `ErrorCode`, then into `STATUS` in `apps/worker/src/http.ts`.
-2. **`apps/worker/src/store.ts`** — synchronous Drizzle queries only. No `await`, no R2, no `fetch`: everything here must be callable inside `transactionSync`.
-3. **`apps/worker/src/vault-do.ts`** — a public method that takes `token` first and wraps its body in `this.authed(token, ...)`. Return `RpcResult<T>`; never throw for expected failures. Mark it in the `retryable(...)` block only if running it twice is harmless.
-4. **`apps/worker/src/routes/*.ts`** — validate with `validate(target, Schema)`, call the stub once, return `c.json(unwrap(result))`. One DO call per request; a second call needs a reason (see the `do-cost-review` skill).
-5. **`apps/worker/test/*.test.ts`** — cover the happy path, the auth failure and each new error code through `exports.default.fetch`.
+1. **Contract** — `packages/protocol/src/<domain>.schema.ts`. Export `const X` plus `type X = z.infer<typeof X>`. Use branded ids. A new error case reuses an existing `ERR_*` code unless clients must branch on it; a new code goes in `envelope.schema.ts` and in `STATUS` in `apps/api/src/common/errors.ts`.
+2. **Entity** (only for new tables or columns) — `apps/api/src/entities/<table>.entity.ts`, export from `index.ts`, then `pnpm --filter @vault-sync/api db:generate`.
+3. **Store** — `apps/api/src/durable-objects/vault.store.ts`. Synchronous Drizzle only: no `await`, no R2, no `fetch`.
+4. **Durable Object** — `vault.durable-object.ts`. A public method that takes `token` first and wraps its body in `this.authed(token, ...)`. Return `RpcResult<T>` with `ok`/`fail`; never throw for expected failures. Add it to `retryable(...)` only if running it twice is harmless.
+5. **Service** — `apps/api/src/services/<domain>.service.ts`, extending `BaseService`. Call the stub once and `this.unwrap(...)` the result. R2 work lives here.
+6. **Controller** — `apps/api/src/controllers/<domain>.controller.ts`. `validate(target, schema)`, call `c.var.container.<service>`, return `c.json({ data })`. API-only param/header schemas go in `apps/api/src/schemas/`.
+7. **Client** — `apps/cli/src/clients/api.client.ts`, parsing the response with `parseData(Schema, body)`.
+8. **Tests** — `apps/api/test/<topic>.test.ts`: happy path, auth failure, each error code, through `exports.default.fetch` with `readData`/`readErrorCode`.
 
 Then run the `verify` skill.
 
-Rules that keep this layering intact:
-- The Worker never writes to R2 before `vault.authorize(token)` or another authed call has succeeded.
+Invariants:
+
+- No R2 write before an authed Durable Object call has succeeded.
+- One DO request per API call; a second one needs a reason (see `do-cost-review`).
 - Request bodies stream to R2; never `arrayBuffer()` or `text()` an upload.
-- Validate external input with Zod at the edge; inside, trust the types.
+- Zero comments: if something needs explaining, rename it, split it, or record the decision in `docs/decisions.md`.

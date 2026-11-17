@@ -1,4 +1,4 @@
 {
-  "extends": "../../tsconfig.base.json",
-  "include": ["src"]
+  "extends": "@vault-sync/typescript-config/base.json",
+  "include": ["src", "test"]
 }

@@ -48,27 +48,24 @@ Available hints: `wnam`, `enam`, `sam`, `weur`, `eeur`, `apac`, `oc`, `afr`, `me
 ### SQLite (Recommended)
 
 Configure in wrangler:
+
 ```jsonc
 { "migrations": [{ "tag": "v1", "new_sqlite_classes": ["MyDO"] }] }
 ```
 
 SQL API is synchronous:
+
 ```typescript
 // Write
-this.ctx.storage.sql.exec(
-  "INSERT INTO items (name, value) VALUES (?, ?)",
-  name, value
-);
+this.ctx.storage.sql.exec("INSERT INTO items (name, value) VALUES (?, ?)", name, value);
 
 // Read
-const rows = this.ctx.storage.sql.exec<{ id: number; name: string }>(
-  "SELECT * FROM items WHERE name = ?", name
-).toArray();
+const rows = this.ctx.storage.sql
+  .exec<{ id: number; name: string }>("SELECT * FROM items WHERE name = ?", name)
+  .toArray();
 
 // Single row
-const row = this.ctx.storage.sql.exec<{ count: number }>(
-  "SELECT COUNT(*) as count FROM items"
-).one();
+const row = this.ctx.storage.sql.exec<{ count: number }>("SELECT COUNT(*) as count FROM items").one();
 ```
 
 ### Migrations
@@ -113,11 +110,11 @@ For production apps, consider [`durable-utils`](https://github.com/lambrospetrou
 
 ### State Types
 
-| Type | Speed | Persistence | Use Case |
-|------|-------|-------------|----------|
-| Class properties | Fastest | Lost on eviction | Caching, active connections |
-| SQLite storage | Fast | Durable | Primary data |
-| External (R2, D1) | Variable | Durable, cross-DO | Large files, shared data |
+| Type              | Speed    | Persistence       | Use Case                    |
+| ----------------- | -------- | ----------------- | --------------------------- |
+| Class properties  | Fastest  | Lost on eviction  | Caching, active connections |
+| SQLite storage    | Fast     | Durable           | Primary data                |
+| External (R2, D1) | Variable | Durable, cross-DO | Large files, shared data    |
 
 **Rule**: Always persist critical state to SQLite first, then update in-memory cache.
 
@@ -199,7 +196,8 @@ export class ChatRoom extends DurableObject<Env> {
     // Public methods are RPC endpoints
     const result = this.ctx.storage.sql.exec<{ id: number }>(
       "INSERT INTO messages (user_id, content) VALUES (?, ?) RETURNING id",
-      userId, content
+      userId,
+      content,
     );
     return { id: result.one().id, userId, content };
   }
@@ -234,11 +232,11 @@ async alarm(): Promise<void> {
   const tasks = this.ctx.storage.sql.exec<Task>(
     "SELECT * FROM tasks WHERE due_at <= ?", Date.now()
   ).toArray();
-  
+
   for (const task of tasks) {
     await this.processTask(task);
   }
-  
+
   // Reschedule if more work
   const next = this.ctx.storage.sql.exec<{ due_at: number }>(
     "SELECT MIN(due_at) as due_at FROM tasks WHERE due_at > ?", Date.now()

@@ -1,16 +1,17 @@
 ---
 name: verify
-description: Runs the vault-sync quality gate (oxlint, type-aware ESLint, typecheck, tests). Use before committing, after any code change, or when asked whether the repo is green.
-allowed-tools: Bash(pnpm lint *) Bash(pnpm typecheck *) Bash(pnpm test *) Bash(pnpm --filter *)
+description: Runs the vault-sync quality gate (format, type-aware oxlint, zero comments, typecheck, tests, unused code). Use before committing, after any code change, or when asked whether the repo is green.
+allowed-tools: Bash(pnpm verify) Bash(pnpm knip) Bash(pnpm format) Bash(pnpm --filter *)
 ---
 
-Run from the repo root, in order, and stop at the first failure:
+From the repo root:
 
-1. `pnpm lint` — oxlint first, then ESLint for the type-aware rules only.
-2. `pnpm typecheck`
-3. `pnpm test` — the Worker suite runs inside workerd with local DO and R2.
+1. If `apps/api/wrangler.jsonc` changed: `pnpm --filter @vault-sync/api cf-typegen`.
+2. If `apps/api/src/entities/` changed: `pnpm --filter @vault-sync/api db:generate`, and commit the new files under `drizzle/migrations/`.
+3. `pnpm format` to apply formatting.
+4. `pnpm verify` runs, in order: format check, oxlint with type information, the zero-comment check, typecheck through Turborepo, tests through Turborepo.
+5. `pnpm knip` checks for unused files, exports and dependencies.
 
-If `apps/worker/wrangler.jsonc` changed, run `pnpm --filter @vault-sync/worker cf-typegen` before step 2.
-If `apps/worker/src/db/schema.ts` changed, run `pnpm --filter @vault-sync/worker db:generate` and commit the new file under `drizzle/`.
+Check each command's exit code, not only its last lines: a pipe through `tail` hides failures.
 
-Report the failing command and its first error. Fix the cause; never weaken a lint rule or skip a test to get green.
+Report the first failing command and its first error. Fix the cause; never weaken a lint rule, add a comment, or skip a test to get green.

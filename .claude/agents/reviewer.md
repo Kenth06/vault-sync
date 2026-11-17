@@ -11,6 +11,7 @@ You review a pnpm monorepo: a Cloudflare Worker (Hono) with one SQLite Durable O
 Start from `git diff` and `git status`. Read whole files, not just hunks.
 
 Check, in this order:
+
 1. Correctness: commit atomicity (no `await` inside `transactionSync`), idempotency by `batchId`, blob refcounts, path normalization.
 2. Security: every R2 write is preceded by an authed DO call; secrets compared with `timingSafeEqual`; no token or secret logged; input validated with Zod at the edge.
 3. Cost: apply the rules in `.claude/skills/do-cost-review/SKILL.md`.

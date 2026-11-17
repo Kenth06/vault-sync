@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-export type NormalizeResult = { readonly ok: true; readonly path: string } | { readonly ok: false; readonly reason: string };
+export type NormalizeResult =
+  | { readonly ok: true; readonly path: string }
+  | { readonly ok: false; readonly reason: string };
 
 const DRIVE_LETTER = /^[a-z]:/iu;
 const FIRST_PRINTABLE = 0x20;
@@ -13,7 +15,6 @@ function hasControlChars(value: string): boolean {
   });
 }
 
-/** NFC everywhere: Windows and macOS spell accented names differently and must map to one path. */
 export function normalizeVaultPath(raw: string): NormalizeResult {
   const path = raw.normalize("NFC").replaceAll("\\", "/");
   if (hasControlChars(path)) return { ok: false, reason: "control characters in path" };

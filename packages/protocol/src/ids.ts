@@ -28,10 +28,6 @@ export function blobKey(hash: Sha256): string {
   return `blobs/sha256/${hash.slice(0, 2)}/${hash.slice(2, 4)}/${hash}`;
 }
 
-/**
- * Token layout: `vs1.<vaultId>.<deviceId>.<secret>`. The ids are not secret;
- * they let the Worker route to the vault's Durable Object without a lookup.
- */
 export const TOKEN_PREFIX = "vs1";
 
 export interface ParsedToken {

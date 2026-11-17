@@ -1,0 +1,12 @@
+{
+  "$schema": "./node_modules/oxfmt/configuration_schema.json",
+  "useTabs": false,
+  "tabWidth": 2,
+  "singleQuote": false,
+  "semi": true,
+  "printWidth": 120,
+  "trailingComma": "all",
+  "arrowParens": "always",
+  "sortImports": { "newlinesBetween": true },
+  "ignorePatterns": ["**/drizzle/migrations/**", "**/worker-configuration.d.ts", "**/.wrangler/**", "pnpm-lock.yaml"]
+}

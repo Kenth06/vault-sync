@@ -1,0 +1,9 @@
+{
+  "$schema": "https://unpkg.com/knip@6/schema.json",
+  "ignore": [".claude/**"],
+  "workspaces": {
+    "apps/api": { "project": ["src/**/*.ts", "test/**/*.ts"] },
+    "apps/cli": { "project": ["src/**/*.ts", "test/**/*.ts"] },
+    "packages/protocol": { "project": ["src/**/*.ts", "test/**/*.ts"] }
+  }
+}

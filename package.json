@@ -2,19 +2,26 @@
   "name": "vault-sync",
   "private": true,
   "type": "module",
-  "packageManager": "pnpm@11.20.0",
   "scripts": {
-    "typecheck": "pnpm -r typecheck",
-    "lint": "oxlint && eslint .",
-    "test": "pnpm -r test",
-    "dev": "pnpm --filter @vault-sync/worker dev"
+    "dev": "turbo run dev",
+    "check-types": "turbo run check-types",
+    "test": "turbo run test",
+    "lint": "oxlint --type-aware && node scripts/check-comments.mjs apps packages",
+    "format": "oxfmt",
+    "format:check": "oxfmt --check",
+    "knip": "knip",
+    "verify": "pnpm format:check && pnpm lint && pnpm check-types && pnpm test"
   },
   "devDependencies": {
-    "@eslint/js": "^10.0.0",
-    "eslint": "^10.15.0",
-    "eslint-plugin-oxlint": "^1.94.0",
+    "knip": "^6.45.1",
+    "oxfmt": "^0.79.0",
     "oxlint": "^1.94.0",
-    "typescript": "~5.9.3",
-    "typescript-eslint": "^8.73.0"
-  }
+    "oxlint-tsgolint": "^7.0.2007",
+    "turbo": "^2.11.11",
+    "typescript": "~5.9.3"
+  },
+  "engines": {
+    "node": ">=24"
+  },
+  "packageManager": "pnpm@11.20.0"
 }

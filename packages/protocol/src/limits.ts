@@ -1,0 +1,8 @@
+export const SINGLE_PUT_MAX_BYTES = 90 * 1024 * 1024;
+export const MULTIPART_PART_BYTES = 32 * 1024 * 1024;
+export const MAX_BATCH_CHANGES = 500;
+export const MAX_MULTIPART_PARTS = 10_000;
+export const MAX_PATH_LENGTH = 1024;
+export const MAX_DEVICE_NAME_LENGTH = 100;
+export const MAX_PAGE_SIZE = 1000;
+export const DEFAULT_PAGE_SIZE = 500;
