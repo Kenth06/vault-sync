@@ -1,17 +1,20 @@
 import path from "node:path";
 
 import { normalizeVaultPath } from "@vault-sync/protocol";
+import {
+  ApiError,
+  LiveConnection,
+  REMOTE_CHANGE_DEBOUNCE_MS,
+  SyncLoop,
+  type IgnoreFn,
+  type SyncReport,
+} from "@vault-sync/sync-core";
 import { watch } from "chokidar";
 
 import { ApiClient } from "../clients/api.client.ts";
-import { LiveConnection } from "../clients/live.client.ts";
-import { REMOTE_CHANGE_DEBOUNCE_MS } from "../common/constants.ts";
-import { ApiError } from "../common/errors.ts";
-import type { SyncReport, VaultContext } from "../common/types.ts";
+import type { VaultContext } from "../common/types.ts";
 import { loadIgnore } from "../storage/ignore-file.ts";
 import type { LocalState } from "../storage/local-state.ts";
-import type { IgnoreFn } from "../utils/ignore.ts";
-import { SyncLoop } from "./sync-loop.ts";
 import { syncOnce } from "./sync.service.ts";
 
 export interface WatchHooks {
@@ -55,7 +58,8 @@ export async function watchVault(
     loop.schedule();
   });
   const client = new ApiClient(ctx.config.url, ctx.token);
-  const live = new LiveConnection(ctx, {
+  const target = { url: ctx.config.url, vaultId: ctx.config.vaultId, deviceId: ctx.config.deviceId, token: ctx.token };
+  const live = new LiveConnection(target, {
     onRemoteChange: () => {
       loop.schedule(REMOTE_CHANGE_DEBOUNCE_MS);
     },

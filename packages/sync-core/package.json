@@ -1,0 +1,21 @@
+{
+  "name": "@vault-sync/sync-core",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "check-types": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vault-sync/protocol": "workspace:*",
+    "ignore": "^7.0.16"
+  },
+  "devDependencies": {
+    "@vault-sync/typescript-config": "workspace:*",
+    "vitest": "^5.1.0"
+  }
+}

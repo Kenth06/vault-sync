@@ -1,7 +1,7 @@
 import { Change, MAX_BATCH_CHANGES } from "@vault-sync/protocol";
 
-import { MAX_BATCH_BYTES } from "../common/constants.ts";
-import type { FileMeta } from "../common/types.ts";
+import { MAX_BATCH_BYTES } from "../constants.ts";
+import type { FileMeta } from "../types.ts";
 
 export function diffTrees(local: ReadonlyMap<string, FileMeta>, synced: ReadonlyMap<string, FileMeta>): Change[] {
   const removed = [...synced].filter(([p]) => !local.has(p));

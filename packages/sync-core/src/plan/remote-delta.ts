@@ -1,6 +1,6 @@
 import type { ChangeRow } from "@vault-sync/protocol";
 
-import type { FileMeta } from "../common/types.ts";
+import type { FileMeta } from "../types.ts";
 
 export type RemoteState = FileMeta | null;
 

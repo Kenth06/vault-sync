@@ -1,10 +1,10 @@
 import { ChangeRow } from "@vault-sync/protocol";
 import { describe, expect, it } from "vitest";
 
-import type { FileMeta } from "../src/common/types.ts";
-import { conflictName } from "../src/utils/conflict-name.ts";
-import { planPull } from "../src/utils/pull-plan.ts";
-import { remoteDelta } from "../src/utils/remote-delta.ts";
+import { conflictName } from "../src/plan/conflict-name.ts";
+import { planPull } from "../src/plan/pull-plan.ts";
+import { remoteDelta } from "../src/plan/remote-delta.ts";
+import type { FileMeta } from "../src/types.ts";
 
 const meta = (h: string): FileMeta => ({ hash: h.repeat(64).slice(0, 64), size: 1, mtime: 1 });
 const map = (entries: Record<string, FileMeta>) => new Map(Object.entries(entries));

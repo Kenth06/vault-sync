@@ -1,4 +1,4 @@
-import type { FileMeta } from "../common/types.ts";
+import type { FileMeta } from "../types.ts";
 import type { RemoteState } from "./remote-delta.ts";
 
 export type PullAction =

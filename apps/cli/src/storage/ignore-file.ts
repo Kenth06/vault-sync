@@ -1,8 +1,9 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 
+import { buildIgnore, type IgnoreFn } from "@vault-sync/sync-core";
+
 import { IGNORE_FILE } from "../common/constants.ts";
-import { buildIgnore, type IgnoreFn } from "../utils/ignore.ts";
 
 export async function loadIgnore(root: string): Promise<IgnoreFn> {
   try {

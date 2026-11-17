@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import type { SyncReport } from "../src/common/types.ts";
-import { SyncLoop } from "../src/services/sync-loop.ts";
+import { SyncLoop } from "../src/engine/sync-loop.ts";
+import type { SyncReport } from "../src/types.ts";
 
 const report: SyncReport = { pulled: 0, pushed: 0, batches: 0, conflicts: [], failed: [], cursor: 0 };
 

@@ -1,0 +1,9 @@
+{
+  "id": "vault-sync",
+  "name": "Vault Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.11.4",
+  "description": "Sync this vault with your own Cloudflare Worker (Durable Object + R2), with conflict copies and live updates.",
+  "author": "Kenneth",
+  "isDesktopOnly": false
+}

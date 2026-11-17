@@ -1,4 +1,6 @@
-import { ErrorBody, type ErrorCode } from "@vault-sync/protocol";
+import { CommitConflicts, ErrorBody, type ErrorCode } from "@vault-sync/protocol";
+
+import { HTTP_BASE_DELAY_MS, HTTP_MAX_ATTEMPTS } from "./constants.ts";
 
 const TOO_MANY_REQUESTS = 429;
 const SERVER_ERROR = 500;
@@ -45,4 +47,32 @@ export class ApiError extends Error {
     const { code, error, details } = parsed.data;
     return new ApiError({ ...base, code, message: error, details });
   }
+}
+
+const NOT_FOUND = 404;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => {
+    setTimeout(resolve, ms);
+  });
+}
+
+export async function withRetry<T>(run: () => Promise<T>): Promise<T> {
+  for (let attempt = 1; ; attempt += 1) {
+    try {
+      return await run();
+    } catch (error) {
+      if (!(error instanceof ApiError) || !error.retryable || attempt >= HTTP_MAX_ATTEMPTS) throw error;
+      const backoff = HTTP_BASE_DELAY_MS * 2 ** (attempt - 1) * (0.5 + Math.random());
+      await delay(Math.max(backoff, error.retryAfterMs));
+    }
+  }
+}
+
+export function isStaleBase(error: unknown): boolean {
+  return error instanceof ApiError && error.code === "ERR_CONFLICT" && CommitConflicts.safeParse(error.details).success;
+}
+
+export function isNotFound(error: unknown): boolean {
+  return error instanceof ApiError && error.status === NOT_FOUND;
 }

@@ -1,5 +1,5 @@
-import { WATCH_DEBOUNCE_MS, WATCH_MAX_BACKOFF_MS } from "../common/constants.ts";
-import type { SyncReport } from "../common/types.ts";
+import { WATCH_DEBOUNCE_MS, WATCH_MAX_BACKOFF_MS } from "../constants.ts";
+import type { SyncReport } from "../types.ts";
 
 export interface SyncLoopOptions {
   readonly sync: () => Promise<SyncReport>;
@@ -9,7 +9,7 @@ export interface SyncLoopOptions {
 }
 
 export class SyncLoop {
-  private timer: NodeJS.Timeout | undefined;
+  private timer: ReturnType<typeof setTimeout> | undefined;
   private running = false;
   private dirty = false;
   private failures = 0;

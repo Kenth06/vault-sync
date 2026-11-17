@@ -1,7 +1,6 @@
 import { ChangedEvent, WS_PING, WS_PONG, WS_PROTOCOL } from "@vault-sync/protocol";
 
-import { LIVE_MAX_BACKOFF_MS, LIVE_PING_MS } from "../common/constants.ts";
-import type { VaultContext } from "../common/types.ts";
+import { LIVE_MAX_BACKOFF_MS, LIVE_PING_MS } from "../constants.ts";
 
 const BASE_RECONNECT_MS = 1000;
 const STABLE_AFTER_MS = 30_000;
@@ -14,8 +13,15 @@ export interface LiveHooks {
   readonly stillAllowed: () => Promise<boolean>;
 }
 
-function socketUrl(ctx: VaultContext): string {
-  const url = new URL(`/v1/vaults/${ctx.config.vaultId}/ws`, ctx.config.url);
+export interface LiveTarget {
+  readonly url: string;
+  readonly vaultId: string;
+  readonly deviceId: string;
+  readonly token: string;
+}
+
+function socketUrl(target: LiveTarget): string {
+  const url = new URL(`/v1/vaults/${target.vaultId}/ws`, target.url);
   url.protocol = url.protocol === "https:" ? "wss:" : "ws:";
   return url.toString();
 }
@@ -32,17 +38,17 @@ function parseEvent(data: unknown): ChangedEvent | null {
 
 export class LiveConnection {
   private socket: WebSocket | null = null;
-  private ping: NodeJS.Timeout | undefined;
-  private retry: NodeJS.Timeout | undefined;
+  private ping: ReturnType<typeof setTimeout> | undefined;
+  private retry: ReturnType<typeof setTimeout> | undefined;
   private attempts = 0;
   private openedAt = 0;
   private lastPong = 0;
   private stopped = false;
-  private readonly ctx: VaultContext;
+  private readonly target: LiveTarget;
   private readonly hooks: LiveHooks;
 
-  constructor(ctx: VaultContext, hooks: LiveHooks) {
-    this.ctx = ctx;
+  constructor(target: LiveTarget, hooks: LiveHooks) {
+    this.target = target;
     this.hooks = hooks;
   }
 
@@ -59,7 +65,7 @@ export class LiveConnection {
   }
 
   private open(): void {
-    const socket = new WebSocket(socketUrl(this.ctx), [WS_PROTOCOL, this.ctx.token]);
+    const socket = new WebSocket(socketUrl(this.target), [WS_PROTOCOL, this.target.token]);
     this.socket = socket;
     this.openedAt = 0;
     socket.addEventListener("open", () => {
@@ -90,7 +96,7 @@ export class LiveConnection {
       return;
     }
     const event = parseEvent(data);
-    if (event && event.deviceId !== this.ctx.config.deviceId) this.hooks.onRemoteChange();
+    if (event && event.deviceId !== this.target.deviceId) this.hooks.onRemoteChange();
   }
 
   private async onClose(code: number): Promise<void> {

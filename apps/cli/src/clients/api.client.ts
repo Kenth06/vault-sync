@@ -18,36 +18,16 @@ import {
   type PlanRequest,
   type VaultId,
 } from "@vault-sync/protocol";
+import { ApiError, withRetry, type Bytes } from "@vault-sync/sync-core";
 import { z } from "zod";
 
-import { HTTP_BASE_DELAY_MS, HTTP_MAX_ATTEMPTS } from "../common/constants.ts";
-import { ApiError } from "../common/errors.ts";
-
-type Body = { json: unknown } | { stream: ReadableStream<Uint8Array>; size: number } | undefined;
+type Body = { json: unknown } | { stream: Bytes; size: number } | undefined;
 
 export interface PartRequest {
   readonly uploadId: string;
   readonly number: number;
-  readonly stream: ReadableStream<Uint8Array>;
+  readonly stream: Bytes;
   readonly size: number;
-}
-
-function delay(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
-}
-
-export async function withRetry<T>(run: () => Promise<T>): Promise<T> {
-  for (let attempt = 1; ; attempt += 1) {
-    try {
-      return await run();
-    } catch (error) {
-      if (!(error instanceof ApiError) || !error.retryable || attempt >= HTTP_MAX_ATTEMPTS) throw error;
-      const backoff = HTTP_BASE_DELAY_MS * 2 ** (attempt - 1) * (0.5 + Math.random());
-      await delay(Math.max(backoff, error.retryAfterMs));
-    }
-  }
 }
 
 export class ApiClient {
@@ -68,11 +48,11 @@ export class ApiClient {
   }
 
   plan(vaultId: VaultId, req: PlanRequest): Promise<PlanResponse> {
-    return withRetry(() => this.send("POST", `/v1/vaults/${vaultId}/plan`, PlanResponse, { json: req }));
+    return this.send("POST", `/v1/vaults/${vaultId}/plan`, PlanResponse, { json: req });
   }
 
   commit(vaultId: VaultId, req: CommitRequest): Promise<CommitResponse> {
-    return withRetry(() => this.send("POST", `/v1/vaults/${vaultId}/commit`, CommitResponse, { json: req }));
+    return this.send("POST", `/v1/vaults/${vaultId}/commit`, CommitResponse, { json: req });
   }
 
   async hasBlob(hash: string): Promise<boolean> {
@@ -81,7 +61,7 @@ export class ApiClient {
     throw await ApiError.fromResponse(res);
   }
 
-  putBlob(hash: string, stream: ReadableStream<Uint8Array>, size: number): Promise<BlobStored> {
+  putBlob(hash: string, stream: Bytes, size: number): Promise<BlobStored> {
     return this.send("PUT", `/v1/blobs/${hash}`, BlobStored, { stream, size });
   }
 
@@ -92,7 +72,7 @@ export class ApiClient {
 
   changes(vaultId: VaultId, since: number, limit: number): Promise<ChangeRow[]> {
     const url = `/v1/vaults/${vaultId}/changes?since=${since}&limit=${limit}`;
-    return withRetry(() => this.send("GET", url, ChangeRow.array()));
+    return this.send("GET", url, ChangeRow.array());
   }
 
   history(vaultId: VaultId, path: string): Promise<ChangeRow[]> {

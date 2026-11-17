@@ -82,7 +82,8 @@
       "files": ["**/test/**"],
       "rules": {
         "max-lines-per-function": "off",
-        "no-magic-numbers": "off"
+        "no-magic-numbers": "off",
+        "max-classes-per-file": "off"
       }
     },
     {
@@ -97,7 +98,7 @@
       }
     },
     {
-      "files": ["apps/cli/**", "scripts/**"],
+      "files": ["apps/cli/**", "scripts/**", "packages/sync-core/**", "apps/obsidian-plugin/**"],
       "rules": {
         "no-console": "off",
         "no-await-in-loop": "off"

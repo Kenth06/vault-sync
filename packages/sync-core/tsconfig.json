@@ -1,0 +1,8 @@
+{
+  "extends": "@vault-sync/typescript-config/base.json",
+  "compilerOptions": {
+    "erasableSyntaxOnly": true,
+    "lib": ["ES2023", "DOM"]
+  },
+  "include": ["src", "test"]
+}

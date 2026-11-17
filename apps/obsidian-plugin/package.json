@@ -1,0 +1,23 @@
+{
+  "name": "@vault-sync/obsidian-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs --production",
+    "dev": "node build.mjs",
+    "check-types": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@vault-sync/protocol": "workspace:*",
+    "@vault-sync/sync-core": "workspace:*",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@vault-sync/typescript-config": "workspace:*",
+    "esbuild": "0.28.2",
+    "obsidian": "1.14.4",
+    "vitest": "^5.1.0"
+  }
+}

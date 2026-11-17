@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from "vitest";
 
-import { withRetry } from "../src/clients/api.client.ts";
-import { ApiError } from "../src/common/errors.ts";
+import { ApiError, withRetry } from "../src/errors.ts";
 
 const error = (status: number, code: ApiError["code"]) => new ApiError({ status, code, message: "x" });
 

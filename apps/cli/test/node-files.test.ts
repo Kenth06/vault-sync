@@ -4,13 +4,40 @@ import os from "node:os";
 import path from "node:path";
 
 import { ChangeRow, DeviceId, VaultId } from "@vault-sync/protocol";
+import { ApiError, buildIgnore, pullOnce, type Remote, type SyncEnvironment } from "@vault-sync/sync-core";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
+import { NodeFiles } from "../src/adapters/node-files.ts";
 import { STATE_DIR } from "../src/common/constants.ts";
-import { ApiError } from "../src/common/errors.ts";
 import type { VaultContext } from "../src/common/types.ts";
-import { pullOnce, type PullClient } from "../src/services/pull.service.ts";
 import { LocalState } from "../src/storage/local-state.ts";
+
+type PullClient = Pick<Remote, "changes" | "blobContent">;
+
+function unused(): Promise<never> {
+  return Promise.reject(new Error("not used by pull"));
+}
+
+function environment(client: PullClient): SyncEnvironment {
+  return {
+    files: new NodeFiles(fixture.root, fixture.state),
+    remote: {
+      ...client,
+      plan: unused,
+      commit: unused,
+      hasBlob: unused,
+      putBlob: unused,
+      createUpload: unused,
+      uploadPart: unused,
+      completeUpload: unused,
+    },
+    store: fixture.state,
+    isIgnored: buildIgnore(),
+    device: "test-host",
+    caseInsensitive: process.platform === "win32" || process.platform === "darwin",
+    unsafePath: () => false,
+  };
+}
 
 const sha = (text: string) => createHash("sha256").update(text).digest("hex");
 
@@ -99,11 +126,7 @@ describe("pullOnce", () => {
   it("writes a remote edit over a file deleted locally instead of failing", async () => {
     await writeLocal("a.md", "base", true);
     await rm(path.join(fixture.root, "a.md"));
-    const report = await pullOnce(
-      fakeClient([put(1, "a.md", "remote edit")], ["remote edit"]),
-      fixture.ctx,
-      fixture.state,
-    );
+    const report = await pullOnce(environment(fakeClient([put(1, "a.md", "remote edit")], ["remote edit"])));
     expect(await read("a.md")).toBe("remote edit");
     expect(report).toMatchObject({ failed: [], cursor: 1 });
   });
@@ -113,7 +136,7 @@ describe("pullOnce", () => {
     const client = fakeClient([put(1, "a.md", "remote")], ["remote"], async () => {
       await writeFile(path.join(fixture.root, "a.md"), "typed during pull");
     });
-    await pullOnce(client, fixture.ctx, fixture.state);
+    await pullOnce(environment(client));
     const copies = (await files()).filter((f) => f.includes("conflicto"));
     expect(await read("a.md")).toBe("remote");
     expect(await Promise.all(copies.map(read))).toEqual(["typed during pull"]);
@@ -121,7 +144,7 @@ describe("pullOnce", () => {
 
   it("never writes paths the local ignore rules exclude", async () => {
     const rows = [put(1, ".obsidian/workspace.json", "{}"), put(2, "note.md", "hi")];
-    const report = await pullOnce(fakeClient(rows, ["{}", "hi"]), fixture.ctx, fixture.state);
+    const report = await pullOnce(environment(fakeClient(rows, ["{}", "hi"])));
     expect(await files()).toEqual(["note.md"]);
     expect(report.cursor).toBe(2);
     expect([...fixture.state.synced().keys()]).toEqual(["note.md"]);
@@ -129,7 +152,7 @@ describe("pullOnce", () => {
 
   it("skips a blob the server no longer has and still applies the rest", async () => {
     const rows = [put(1, "gone.md", "collected"), put(2, "ok.md", "fine")];
-    const report = await pullOnce(fakeClient(rows, ["fine"]), fixture.ctx, fixture.state);
+    const report = await pullOnce(environment(fakeClient(rows, ["fine"])));
     expect(report).toMatchObject({ failed: ["gone.md"], cursor: 2 });
     expect(await read("ok.md")).toBe("fine");
   });
@@ -137,9 +160,9 @@ describe("pullOnce", () => {
   it("gives each conflict copy its own name", async () => {
     await writeLocal("a.md", "base", true);
     await writeFile(path.join(fixture.root, "a.md"), "mine one");
-    await pullOnce(fakeClient([put(1, "a.md", "theirs one")], ["theirs one"]), fixture.ctx, fixture.state);
+    await pullOnce(environment(fakeClient([put(1, "a.md", "theirs one")], ["theirs one"])));
     await writeFile(path.join(fixture.root, "a.md"), "mine two");
-    await pullOnce(fakeClient([put(2, "a.md", "theirs two")], ["theirs two"]), fixture.ctx, fixture.state);
+    await pullOnce(environment(fakeClient([put(2, "a.md", "theirs two")], ["theirs two"])));
     const copies = (await files()).filter((f) => f.includes("conflicto"));
     expect(copies).toHaveLength(2);
     expect(new Set(await Promise.all(copies.map(read)))).toEqual(new Set(["mine one", "mine two"]));
@@ -149,18 +172,14 @@ describe("pullOnce", () => {
     await writeLocal("a.md", "pushed", true);
     await writeFile(path.join(fixture.root, "a.md"), "edited again");
     const own = put(1, "a.md", "pushed", fixture.ctx.config.deviceId);
-    await pullOnce(fakeClient([own], ["pushed"]), fixture.ctx, fixture.state);
+    await pullOnce(environment(fakeClient([own], ["pushed"])));
     expect(await read("a.md")).toBe("edited again");
     expect((await files()).some((f) => f.includes("conflicto"))).toBe(false);
   });
 
   it("applies a case-only rename without losing the file", async () => {
     await writeLocal("Note.md", "same bytes", true);
-    await pullOnce(
-      fakeClient([rename(1, "Note.md", "note.md", "same bytes")], ["same bytes"]),
-      fixture.ctx,
-      fixture.state,
-    );
+    await pullOnce(environment(fakeClient([rename(1, "Note.md", "note.md", "same bytes")], ["same bytes"])));
     expect(await files()).toEqual(["note.md"]);
     expect(await read("note.md")).toBe("same bytes");
   });

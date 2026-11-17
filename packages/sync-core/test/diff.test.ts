@@ -1,10 +1,10 @@
 import { MAX_BATCH_CHANGES } from "@vault-sync/protocol";
 import { describe, expect, it } from "vitest";
 
-import { MAX_BATCH_BYTES } from "../src/common/constants.ts";
-import type { FileMeta } from "../src/common/types.ts";
-import { diffTrees, toBatches } from "../src/utils/diff.ts";
-import { buildIgnore } from "../src/utils/ignore.ts";
+import { MAX_BATCH_BYTES } from "../src/constants.ts";
+import { diffTrees, toBatches } from "../src/plan/diff.ts";
+import { buildIgnore } from "../src/plan/ignore.ts";
+import type { FileMeta } from "../src/types.ts";
 
 const meta = (hash: string, size = 10): FileMeta => ({ hash: hash.repeat(64).slice(0, 64), size, mtime: 1 });
 

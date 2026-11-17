@@ -6,10 +6,10 @@ import { Readable, Transform } from "node:stream";
 import { pipeline } from "node:stream/promises";
 
 import type { TreeEntry } from "@vault-sync/protocol";
+import { ApiError, withRetry } from "@vault-sync/sync-core";
 
-import { withRetry, type ApiClient } from "../clients/api.client.ts";
+import type { ApiClient } from "../clients/api.client.ts";
 import { TMP_SUFFIX, UPLOAD_CONCURRENCY } from "../common/constants.ts";
-import { ApiError } from "../common/errors.ts";
 import { assertInside, lexicalTarget } from "./fs-safety.ts";
 
 const NOT_FOUND = 404;

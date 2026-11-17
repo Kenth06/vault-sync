@@ -1,6 +1,8 @@
 import { DeviceId, VaultId } from "@vault-sync/protocol";
 import { z } from "zod";
 
+export type { SyncReport } from "@vault-sync/sync-core";
+
 export const VaultConfig = z.object({
   url: z.url(),
   vaultId: VaultId,
@@ -12,24 +14,4 @@ export interface VaultContext {
   readonly root: string;
   readonly config: VaultConfig;
   readonly token: string;
-}
-
-export interface FileMeta {
-  readonly hash: string;
-  readonly size: number;
-  readonly mtime: number;
-}
-
-export interface LocalFile extends FileMeta {
-  readonly path: string;
-  readonly absPath: string;
-}
-
-export interface SyncReport {
-  readonly pulled: number;
-  readonly pushed: number;
-  readonly batches: number;
-  readonly conflicts: string[];
-  readonly failed: string[];
-  readonly cursor: number;
 }

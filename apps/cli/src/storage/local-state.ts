@@ -2,10 +2,10 @@ import path from "node:path";
 import { DatabaseSync } from "node:sqlite";
 
 import type { Change } from "@vault-sync/protocol";
+import type { FileMeta, SyncStore } from "@vault-sync/sync-core";
 import { z } from "zod";
 
 import { STATE_DIR } from "../common/constants.ts";
-import type { FileMeta } from "../common/types.ts";
 
 const SCHEMA = `
   CREATE TABLE IF NOT EXISTS hash_cache (path TEXT PRIMARY KEY, size INTEGER NOT NULL, mtime INTEGER NOT NULL, hash TEXT NOT NULL);
@@ -21,7 +21,7 @@ export interface SyncedFile extends FileMeta {
   readonly path: string;
 }
 
-export class LocalState {
+export class LocalState implements SyncStore {
   private readonly db: DatabaseSync;
 
   constructor(root: string) {
