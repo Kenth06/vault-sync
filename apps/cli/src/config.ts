@@ -43,9 +43,13 @@ export async function loadVault(root: string): Promise<VaultContext> {
     throw new Error(`${absolute} is not a vaultsync vault. Run "vaultsync init" first.`);
   }
   const config = VaultConfig.parse(JSON.parse(raw));
+  return { root: absolute, config, token: readToken(config) };
+}
+
+function readToken(config: VaultConfig): string {
   const token = keyringEntry(config).getPassword();
-  if (token === null || token === undefined) {
+  if (token === null) {
     throw new Error(`No token in the OS keychain for ${config.vaultId}. Run "vaultsync init" again.`);
   }
-  return { root: absolute, config, token };
+  return token;
 }
