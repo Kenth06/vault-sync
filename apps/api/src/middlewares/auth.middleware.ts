@@ -1,6 +1,7 @@
 import { parseToken, tokenFromProtocols } from "@vault-sync/protocol";
 import { createMiddleware } from "hono/factory";
 
+import { MIN_ADMIN_SECRET_LENGTH } from "../common/constants.ts";
 import { AppError } from "../common/errors.ts";
 import type { AppEnv, DeviceEnv } from "../common/types/context.ts";
 import { timingSafeEqualSecret } from "../utils/crypto.ts";
@@ -26,6 +27,9 @@ export const requireOwnVault = createMiddleware<DeviceEnv>(async (c, next) => {
 });
 
 export const requireAdmin = createMiddleware<AppEnv>(async (c, next) => {
+  if (c.env.ADMIN_SECRET.length < MIN_ADMIN_SECRET_LENGTH) {
+    throw new AppError("ERR_INTERNAL", "ADMIN_SECRET is too short: set at least 32 random characters");
+  }
   const presented = bearer(c.req.header("Authorization"));
   if (presented === null || !(await timingSafeEqualSecret(presented, c.env.ADMIN_SECRET))) {
     throw new AppError("ERR_UNAUTHORIZED", "admin secret required");

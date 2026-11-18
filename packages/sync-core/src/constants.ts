@@ -1,5 +1,6 @@
 export const STATE_DIR = ".vaultsync";
-export const PLUGIN_DIR = ".obsidian/plugins/vault-sync";
+export const PLUGIN_DIR = ".obsidian/plugins/vault-sync-cloudflare";
+export const LEGACY_PLUGIN_DIR = ".obsidian/plugins/vault-sync";
 export const TMP_SUFFIX = ".vaultsync-tmp";
 
 export const MAX_BATCH_BYTES = 50 * 1024 * 1024;

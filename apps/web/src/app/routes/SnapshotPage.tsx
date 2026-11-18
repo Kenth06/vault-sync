@@ -6,6 +6,7 @@ import { PageBar } from "../../components/layout/PageBar.tsx";
 import { FileContent } from "../../components/vault/FileContent.tsx";
 import { useAsync } from "../../lib/client/hooks/useAsync.ts";
 import { vaultService } from "../../lib/client/services/vault.service.ts";
+import { contentWidth } from "../../lib/file-kind.ts";
 import { formatBytes, formatCount } from "../../lib/format.ts";
 import { snapshotFileHref, snapshotHref } from "../../lib/routes.ts";
 import { displayName, filterFiles } from "../../lib/tree.ts";
@@ -74,7 +75,7 @@ export function SnapshotFilePage() {
         back={{ to: snapshotHref(seq), label: `Snapshot #${seq}` }}
       />
       <article className="px-4 pt-10 pb-24 md:px-10">
-        <div className="mx-auto max-w-[68ch]">
+        <div className={`mx-auto ${contentWidth(path)}`}>
           <h1 className="mb-8 text-[1.875rem] leading-tight font-[650] tracking-[-0.015em] break-words">
             {displayName(path)}
           </h1>

@@ -6,10 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "vite build",
-    "preview": "vite build && wrangler dev --port 8788",
-    "deploy": "vite build && wrangler deploy",
     "check-types": "tsc -p tsconfig.json && tsc -p worker/tsconfig.json",
-    "cf-typegen": "wrangler types worker/worker-configuration.d.ts",
     "test": "vitest run"
   },
   "dependencies": {
@@ -18,10 +15,16 @@
     "@fontsource/jetbrains-mono": "^5.3.0",
     "@hono/zod-validator": "^0.9.1",
     "@phosphor-icons/react": "^2.1.10",
+    "@vault-sync/api": "workspace:*",
     "@vault-sync/protocol": "workspace:*",
     "dompurify": "^3.4.18",
+    "github-slugger": "^2.0.0",
+    "highlight.js": "^11.12.0",
     "hono": "^4.13.19",
+    "katex": "^0.19.1",
     "marked": "^18.2.1",
+    "marked-footnote": "^1.4.0",
+    "mermaid": "^12.3.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-router": "^8.5.1",
@@ -35,7 +38,6 @@
     "@vitejs/plugin-react": "^6.3.0",
     "tailwindcss": "^4.3.5",
     "vite": "^8.3.8",
-    "vitest": "^5.1.0",
-    "wrangler": "4.164.0"
+    "vitest": "^5.1.0"
   }
 }

@@ -2,6 +2,32 @@
 
 Short records of choices that are not obvious from the code. Source files carry no comments, so the reasons live here. Newest first.
 
+## 2026-11-17 — One Worker for the API and the viewer
+
+The viewer used to be a second Worker reaching the API over a service binding. The Deploy to Cloudflare button deploys one Worker per button and cannot build a monorepo subdirectory that depends on workspace packages, so everything now ships as one Worker from the root `wrangler.jsonc`: `apps/web/worker/index.ts` mounts the Hono API app at `/v1` and `/health`, serves the viewer's static assets, and its `/api` proxy calls the API app in process (`createApp(forward)` takes the caller, so tests pass a fake). The Durable Object class and binding names did not change, so existing vault data stays where it is. `apps/api/wrangler.jsonc` remains for the API's workerd tests and API-only local dev.
+
+The button reads `secrets.required` and `.dev.vars.example` for `ADMIN_SECRET`, the `cloudflare.bindings` description in the root `package.json`, provisions the R2 bucket and the Durable Object from the config, and runs `build.command` (the viewer build) before deploying. `.node-version` pins Node 24 for Workers Builds.
+
+## 2026-11-17 — ADMIN_SECRET must be at least 32 characters
+
+Anyone can now deploy this with a button and pick their own secret, and nothing throttles admin attempts (enroll, device list, revoke, viewer sign-in). `requireAdmin` refuses to authenticate while `ADMIN_SECRET` is shorter than 32 characters, so a guessable secret cannot be deployed by accident; at 32 random characters online guessing is hopeless. A Cloudflare rate-limiting rule on `/v1/devices/*` and `POST /api/session` is the optional next layer (see `SECURITY.md`).
+
+PDFs from the vault render inline only inside the viewer's frame (`Sec-Fetch-Dest: iframe`); opened directly they download. Every vault file carries `Cross-Origin-Resource-Policy: same-origin`. Static assets are not marked `immutable`: Workers Static Assets answers a missing `/assets/*` file with the SPA's `index.html` (status 200), and an `immutable` rule on that path would pin that HTML in the browser cache as a script; hashed names plus ETag revalidation are enough. The DOMPurify iframe hook resolves the `src` against the page origin and keeps it only when it is still a same-origin vault file route ending in `.pdf`.
+
+## 2026-11-17 — Obsidian rendering in the viewer
+
+Markdown goes through `marked` with extensions for what Obsidian adds: callouts (foldable with `+`/`-`), `==highlights==`, `#tags`, `%%comments%%`, `$math$`/`$$math$$`, wikilinks with aliases, headings and sizes, and `![[embeds]]` of images, audio, video, PDF and other files. Footnotes use `marked-footnote`; heading ids come from `github-slugger`, prefixed `user-content-` by DOMPurify's `SANITIZE_NAMED_PROPS`, and in-page links are rewritten to match. Math (KaTeX), Mermaid and highlight.js load on demand after the note renders, only when a note needs them, so the first load stays at ~270 KB gzip. Mermaid runs with `securityLevel: "strict"` and SVG labels, and its output is sanitized again with DOMPurify's SVG profile. `.canvas` files render as a board scaled to fit (JSON Canvas: text, file, link and group nodes, edges with labels). Embedding another note shows a link card rather than transcluding it.
+
+PDFs are shown in an `<iframe>` without `sandbox` because Chrome refuses to render a PDF in a sandboxed frame (`oxlint-disable` in `FileContent.tsx`); the frame only ever points at a same-origin vault file, and PDF responses carry `default-src 'none'` and `frame-ancestors 'self'`. Every other file type keeps the `sandbox` CSP.
+
+## 2026-11-17 — Byte ranges for raw files
+
+`GET /v1/vaults/:vaultId/raw/*` honours a single `bytes=` range, parsed against the size already in the manifest (`utils/byte-range.ts`), and answers `206` with `Content-Range`, so audio and video in the viewer can seek. A start beyond the end answers `416` with `Content-Range: bytes */<size>` in the same DO request; multi-range, other units and inverted ranges are ignored and the whole file is sent, as RFC 9110 allows. The viewer proxy forwards `Range` and passes `Content-Range` and `Accept-Ranges` back.
+
+## 2026-11-17 — Plugin id `vault-sync-cloudflare`
+
+Obsidian matches installed plugins to its community catalog by `id`, and `vault-sync` already belongs to an unrelated catalog plugin ("VaultSync"). With that id Obsidian showed and offered to update the other plugin in place of ours. The id is now `vault-sync-cloudflare` (checked absent from `obsidianmd/obsidian-releases/community-plugins.json`), and `PLUGIN_DIR` in `packages/sync-core` follows it so the plugin's own `data.json` and `state.json` stay out of sync. The old folder's `data.json` and `state.json` (`LEGACY_PLUGIN_DIR`) stay ignored too: after an upgrade the old `data.json` still sits in the vault and holds a device token.
+
 ## 2026-11-17 — Web viewer: token in an HttpOnly cookie, read-only proxy
 
 `apps/web` is a second Worker (static assets + a small Hono app) bound to the API with a service binding. Signing in posts the vault id and admin secret to `/api/session`; the web Worker enrolls a device named "Web viewer" and keeps its token in a `__Host-` cookie (`HttpOnly`, `Secure`, `SameSite=Strict`, 400 days). Page JavaScript never sees the token or the admin secret, so an XSS in a rendered note cannot steal it.
@@ -30,7 +56,7 @@ Every change a client pushes carries `baseHash`: the hash this device last synce
 
 ## 2026-11-17 — Pull, then push; conflicts become copies
 
-`sync` pulls first, then pushes. Pull reads `/changes` from the local cursor, reduces it to the latest remote state per path, and compares remote, last-synced and on-disk hashes for each path. Untouched local files take the remote version. Files changed on both sides keep the server version at the original path and move the local version to `<name> (conflicto <host> <YYYY-MM-DD HHmm>).<ext>`, which the next push uploads as a new file. A file deleted remotely but edited locally is kept, and a file deleted locally but edited remotely is written back (an edit beats a delete). When a push is rejected for a stale base, the client pulls and retries once.
+`sync` pulls first, then pushes. Pull reads `/changes` from the local cursor, reduces it to the latest remote state per path, and compares remote, last-synced and on-disk hashes for each path. Untouched local files take the remote version. Files changed on both sides keep the server version at the original path and move the local version to `<name> (conflict <host> <YYYY-MM-DD HHmm>).<ext>`, which the next push uploads as a new file. A file deleted remotely but edited locally is kept, and a file deleted locally but edited remotely is written back (an edit beats a delete). When a push is rejected for a stale base, the client pulls and retries once.
 
 Pull never overwrites unseen local work: right before replacing or deleting a file it compares size and mtime with a snapshot taken before the download, and if the file changed it moves it to a conflict copy first. Conflict copies get a numeric suffix when the name is taken. Paths excluded by `.vaultsyncignore`, anything under `.vaultsync/`, temporary download files and names Windows cannot store are never written. On case-insensitive filesystems (Windows, macOS) a case-only rename is applied as a rename, not as write-then-delete. A remote change whose blob is gone is skipped and reported; any other failure leaves the cursor where it was so the next sync retries. Every version also stays in the server history.
 

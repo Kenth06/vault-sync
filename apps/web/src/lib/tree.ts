@@ -53,7 +53,7 @@ export function ancestorsOf(vaultPath: string): string[] {
 
 export function displayName(vaultPath: string): string {
   const name = vaultPath.slice(vaultPath.lastIndexOf("/") + 1);
-  return name.endsWith(".md") ? name.slice(0, -3) : name;
+  return name.replace(/.(?:md|canvas)$/u, "");
 }
 
 export function filterFiles(files: readonly TreeEntry[], query: string): TreeEntry[] {

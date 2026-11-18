@@ -66,12 +66,18 @@ describe("toBatches", () => {
 describe("ignore rules", () => {
   const isIgnored = buildIgnore(["Private/"]);
 
-  it.each([".vaultsync/state.db", ".obsidian/workspace.json", ".obsidian/cache", ".trash/x.md", "Private/diary.md"])(
-    "ignores %s",
-    (p) => {
-      expect(isIgnored(p)).toBe(true);
-    },
-  );
+  it.each([
+    ".vaultsync/state.db",
+    ".obsidian/workspace.json",
+    ".obsidian/cache",
+    ".trash/x.md",
+    "Private/diary.md",
+    ".obsidian/plugins/vault-sync-cloudflare/data.json",
+    ".obsidian/plugins/vault-sync/data.json",
+    ".obsidian/plugins/vault-sync/state.json",
+  ])("ignores %s", (p) => {
+    expect(isIgnored(p)).toBe(true);
+  });
 
   it.each([".obsidian/app.json", ".obsidian/plugins/dataview/main.js", ".obsidian/snippets/a.css", "Notas/a.md"])(
     "keeps %s",

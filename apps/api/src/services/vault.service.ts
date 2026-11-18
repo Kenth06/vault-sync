@@ -18,13 +18,21 @@ import {
 
 import { AppError } from "../common/errors.ts";
 import type { DeviceAuth } from "../common/types/context.ts";
+import { parseByteRange, type ByteRange } from "../utils/byte-range.ts";
 import { gunzipJson } from "../utils/gzip.ts";
 import { BaseService } from "./base.service.ts";
 
+export interface Unsatisfiable {
+  readonly kind: "unsatisfiable";
+  readonly size: number;
+}
+
 export interface FileContent {
+  readonly kind: "file";
   readonly entry: TreeEntry;
   readonly body: ReadableStream;
   readonly size: number;
+  readonly range: ByteRange;
 }
 
 export class VaultService extends BaseService {
@@ -60,11 +68,15 @@ export class VaultService extends BaseService {
     return this.unwrap(await this.vault(auth.vaultId).tree(auth.token, at));
   }
 
-  async readFile(auth: DeviceAuth, path: VaultPath): Promise<FileContent> {
+  async readFile(auth: DeviceAuth, path: VaultPath, rangeHeader: string | null): Promise<FileContent | Unsatisfiable> {
     const entry = this.unwrap(await this.vault(auth.vaultId).getFile(auth.token, path));
-    const object = await this.bucket.get(blobKey(auth.vaultId, entry.hash));
+    const range = parseByteRange(rangeHeader, entry.size);
+    if (range.kind === "unsatisfiable") return { kind: "unsatisfiable", size: entry.size };
+    const options =
+      range.kind === "part" ? { range: { offset: range.start, length: range.end - range.start + 1 } } : {};
+    const object = await this.bucket.get(blobKey(auth.vaultId, entry.hash), options);
     if (!object) throw new AppError("ERR_INTERNAL", "manifest points at a blob missing from R2");
-    return { entry, body: object.body, size: object.size };
+    return { kind: "file", entry, body: object.body, size: object.size, range };
   }
 
   connect(auth: DeviceAuth, request: Request): Promise<Response> {

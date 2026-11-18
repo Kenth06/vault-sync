@@ -68,13 +68,25 @@ export const vaultController = new Hono<DeviceEnv>()
   })
 
   .get("/:vaultId/raw/:path{.+}", validate("param", rawFileParamSchema), async (c) => {
-    const file = await c.var.container.vaultService.readFile(c.var.auth, c.req.valid("param").path);
-    return new Response(file.body, {
-      headers: {
-        "Content-Type": "application/octet-stream",
-        "Content-Length": String(file.size),
-        ETag: `"${file.entry.hash}"`,
-        "X-Vault-Mtime": String(file.entry.mtime),
-      },
+    const file = await c.var.container.vaultService.readFile(
+      c.var.auth,
+      c.req.valid("param").path,
+      c.req.header("Range") ?? null,
+    );
+    if (file.kind === "unsatisfiable") {
+      return new Response(null, { status: 416, headers: { "Content-Range": `bytes */${file.size}` } });
+    }
+    const headers = new Headers({
+      "Content-Type": "application/octet-stream",
+      "Accept-Ranges": "bytes",
+      ETag: `"${file.entry.hash}"`,
+      "X-Vault-Mtime": String(file.entry.mtime),
     });
+    if (file.range.kind !== "part") {
+      headers.set("Content-Length", String(file.size));
+      return new Response(file.body, { headers });
+    }
+    headers.set("Content-Length", String(file.range.end - file.range.start + 1));
+    headers.set("Content-Range", `bytes ${file.range.start}-${file.range.end}/${file.size}`);
+    return new Response(file.body, { status: 206, headers });
   });

@@ -10,6 +10,7 @@ import { HistoryPanel } from "../../components/vault/HistoryPanel.tsx";
 import { useVault } from "../../contexts/VaultContext.tsx";
 import { useAsync } from "../../lib/client/hooks/useAsync.ts";
 import { vaultService } from "../../lib/client/services/vault.service.ts";
+import { contentWidth } from "../../lib/file-kind.ts";
 import { formatBytes, formatFullDate } from "../../lib/format.ts";
 import { displayName } from "../../lib/tree.ts";
 
@@ -70,7 +71,7 @@ function FileView({ entry }: { readonly entry: TreeEntry }) {
       />
       <div className="flex min-h-0 flex-1 max-lg:flex-col">
         <article className="min-w-0 flex-1 px-4 pt-10 pb-24 md:px-10">
-          <div className="mx-auto max-w-[68ch]">
+          <div className={`mx-auto ${contentWidth(entry.path)}`}>
             {version !== null && (
               <Banner
                 variant="secondary"

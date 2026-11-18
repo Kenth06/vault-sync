@@ -22,6 +22,6 @@ export function conflictName(vaultPath: string, device: string, date: Date, atte
   const { dir, stem, ext } = splitPath(vaultPath);
   const label = device.replaceAll(UNSAFE, "-");
   const suffix = attempt > 1 ? ` ${attempt}` : "";
-  const name = `${stem.slice(0, MAX_STEM)} (conflicto ${label} ${stamp(date)}${suffix})${ext}`;
+  const name = `${stem.slice(0, MAX_STEM)} (conflict ${label} ${stamp(date)}${suffix})${ext}`;
   return dir === "" ? name : `${dir}/${name}`;
 }

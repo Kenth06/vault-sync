@@ -2,7 +2,7 @@
 
 Backs up an Obsidian vault to the owner's Cloudflare account: a CLI daemon on the vault's PC pushes every change to a Worker, which stores bytes in R2 and the vault index in one SQLite Durable Object per vault.
 
-Spec: "Vault Sync — Requisitos (Obsidian → Cloudflare)" (Claude Docs). Phases F0–F4; v1 is one-way push plus restore.
+One Worker serves everything: the device API at `/v1` (CLI, plugin), the read-only viewer at `/` and its session proxy at `/api`. It is deployed from the root `wrangler.jsonc`, which is also what the Deploy to Cloudflare button reads.
 
 ## Layout
 
@@ -34,8 +34,8 @@ apps/
       common/                  constants, types, errors
       utils/                   pure: diff, remote-delta, pull-plan, conflict-name, ignore rules, formatting
   obsidian-plugin/             Obsidian plugin: adapters over app.vault.adapter and requestUrl, settings, live updates
-  web/                         read-only viewer: React 19 + Vite + Kumo, served by its own Worker
-    worker/                    Hono: /api/session (HttpOnly cookie), allowlist proxy /api/* → API over a service binding
+  web/                         read-only viewer: React 19 + Vite + Kumo
+    worker/                    the deployed entry: mounts the API at /v1, /api/session (HttpOnly cookie), allowlist proxy /api/* → API in process
     src/                       app/ (routes), components/, contexts/, hooks/, lib/ (client/http/api.ts is the only fetch, markdown, tree)
     public/_headers            CSP and security headers for static assets
 packages/
@@ -57,8 +57,10 @@ Dependency direction: `controllers|commands → services → (durable-objects | 
 - `pnpm knip` — unused files, exports and dependencies
 - `pnpm --filter @vault-sync/api cf-typegen` — after editing `wrangler.jsonc`
 - `pnpm --filter @vault-sync/api db:generate` — after editing `src/entities/`
-- `pnpm --filter @vault-sync/web cf-typegen` — after editing `apps/web/wrangler.jsonc`
-- `pnpm --filter @vault-sync/web deploy` — build and deploy the viewer (deploy the API first; the service binding needs it)
+- `pnpm cf-typegen` — after editing the root `wrangler.jsonc` (types for the deployed Worker)
+- `pnpm deploy` — build the viewer and deploy the single Worker (root `wrangler.jsonc`)
+- `pnpm dev:worker` — the whole app locally on :8787 (needs `.dev.vars` at the root)
+- `apps/api/wrangler.jsonc` is for the API tests and API-only local dev; never deploy from it
 
 ## API contract
 
@@ -98,14 +100,14 @@ Dependency direction: `controllers|commands → services → (durable-objects | 
 
 ## Deviations from the house stack standard
 
-This repo follows `stack-standards` v2 (Hono + Zod + typed `di.ts`, Durable Object SQLite per entity, CLI layering). Deviations:
+The layout follows a layered house standard (Hono + Zod + typed `di.ts`, Durable Object SQLite per entity, CLI layering). Deviations from it:
 
 | Standard                         | Here                                                                  | Why                                                                                |
 | -------------------------------- | --------------------------------------------------------------------- | ---------------------------------------------------------------------------------- |
 | `packages/shared`                | `packages/protocol`                                                   | The package is the wire protocol shared by the API and the CLI; the name says so.  |
 | Success responses use `{ data }` | `GET /raw/*path` and `GET /v1/blobs/:sha256/content` stream raw bytes | File contents are streamed from R2 without buffering or wrapping.                  |
-| `/api` prefix behind a web app   | API keeps `/v1` on its own Worker; `apps/web` proxies `/api/*` to it  | The CLI and the plugin call the API directly; only the viewer goes through `/api`. |
+| `/api` prefix behind a web app   | Device API at `/v1`, viewer session proxy at `/api`, one Worker       | The CLI and the plugin call `/v1` with device tokens; only the viewer uses `/api`. |
 
 ## Repository
 
-Private. Never push to a public remote.
+Open source under the MIT license. Never commit secrets: `.dev.vars` is git-ignored, and `.dev.vars.example` only holds placeholders.

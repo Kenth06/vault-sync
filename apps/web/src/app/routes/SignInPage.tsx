@@ -70,7 +70,7 @@ export function SignInPage() {
         <Intro />
         <Input
           label="Vault id"
-          placeholder="notas"
+          placeholder="my-vault"
           autoComplete="username"
           value={vaultId}
           onChange={(event) => {

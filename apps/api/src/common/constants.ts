@@ -8,3 +8,4 @@ export const GC_BATCH = 1000;
 export const RETAIN_DAILY_SNAPSHOTS = 30;
 export const RETAIN_MONTHLY_SNAPSHOTS = 12;
 export const GC_DRAIN_DELAY_MS = 60_000;
+export const MIN_ADMIN_SECRET_LENGTH = 32;

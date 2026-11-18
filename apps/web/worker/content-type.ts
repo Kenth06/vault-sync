@@ -5,16 +5,25 @@ const INLINE_TYPES: Readonly<Record<string, string>> = {
   gif: "image/gif",
   webp: "image/webp",
   avif: "image/avif",
+  bmp: "image/bmp",
   svg: "image/svg+xml",
+  mp3: "audio/mpeg",
+  wav: "audio/wav",
+  m4a: "audio/mp4",
+  ogg: "audio/ogg",
+  flac: "audio/flac",
+  mp4: "video/mp4",
+  webm: "video/webm",
+  ogv: "video/ogg",
+  mov: "video/quicktime",
+  pdf: "application/pdf",
 };
 
 const TEXT_EXTENSIONS = new Set(["md", "txt", "canvas", "json", "csv", "css", "js", "ts", "yaml", "yml"]);
+const FORWARDED = ["Content-Length", "Content-Range", "Accept-Ranges", "ETag", "X-Vault-Mtime"];
 
-const FILE_HEADERS = {
-  "X-Content-Type-Options": "nosniff",
-  "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline'; sandbox",
-  "Cache-Control": "private, no-cache",
-};
+const SANDBOXED = "default-src 'none'; style-src 'unsafe-inline'; sandbox";
+const PDF_POLICY = "default-src 'none'; style-src 'unsafe-inline'; img-src data: blob:; frame-ancestors 'self'";
 
 function extensionOf(name: string): string {
   const dot = name.lastIndexOf(".");
@@ -35,16 +44,25 @@ export function jsonHeaders(upstream: Headers): Headers {
   return headers;
 }
 
-export function fileHeaders(upstream: Headers, name: string): Headers {
-  const headers = new Headers(FILE_HEADERS);
-  for (const key of ["Content-Length", "ETag", "X-Vault-Mtime"]) {
+function disposition(extension: string, destination: string | null): "inline" | "attachment" {
+  if (!(extension in INLINE_TYPES)) return "attachment";
+  return extension === "pdf" && destination === "document" ? "attachment" : "inline";
+}
+
+export function fileHeaders(upstream: Headers, name: string, destination: string | null = null): Headers {
+  const extension = extensionOf(name);
+  const headers = new Headers({
+    "X-Content-Type-Options": "nosniff",
+    "Cross-Origin-Resource-Policy": "same-origin",
+    "Content-Security-Policy": extension === "pdf" ? PDF_POLICY : SANDBOXED,
+    "Cache-Control": "private, no-cache",
+  });
+  for (const key of FORWARDED) {
     const value = upstream.get(key);
     if (value !== null) headers.set(key, value);
   }
-  const extension = extensionOf(name);
-  const disposition = extension in INLINE_TYPES ? "inline" : "attachment";
   const fileName = encodeURIComponent(name.slice(name.lastIndexOf("/") + 1)).replaceAll("'", "%27");
   headers.set("Content-Type", contentType(extension));
-  headers.set("Content-Disposition", `${disposition}; filename*=UTF-8''${fileName}`);
+  headers.set("Content-Disposition", `${disposition(extension, destination)}; filename*=UTF-8''${fileName}`);
   return headers;
 }

@@ -1,6 +1,6 @@
 import ignore from "ignore";
 
-import { PLUGIN_DIR, STATE_DIR, TMP_SUFFIX } from "../constants.ts";
+import { LEGACY_PLUGIN_DIR, PLUGIN_DIR, STATE_DIR, TMP_SUFFIX } from "../constants.ts";
 
 const DEFAULT_RULES = [
   `${STATE_DIR}/`,
@@ -19,6 +19,8 @@ const DEFAULT_RULES = [
   "!.obsidian/snippets/",
   `${PLUGIN_DIR}/data.json`,
   `${PLUGIN_DIR}/state.json`,
+  `${LEGACY_PLUGIN_DIR}/data.json`,
+  `${LEGACY_PLUGIN_DIR}/state.json`,
 ];
 
 export type IgnoreFn = (vaultPath: string) => boolean;

@@ -39,5 +39,13 @@ describe("fileHeaders", () => {
     expect(page.get("Content-Disposition")).toMatch(/^attachment;/u);
     expect(page.get("Content-Security-Policy")).toContain("sandbox");
     expect(page.get("X-Content-Type-Options")).toBe("nosniff");
+    expect(page.get("Cross-Origin-Resource-Policy")).toBe("same-origin");
+  });
+
+  it("renders PDFs inline only inside a frame, never as a top-level page", () => {
+    const upstream = new Headers();
+    expect(fileHeaders(upstream, "paper.pdf", "iframe").get("Content-Disposition")).toMatch(/^inline;/u);
+    expect(fileHeaders(upstream, "paper.pdf", "document").get("Content-Disposition")).toMatch(/^attachment;/u);
+    expect(fileHeaders(upstream, "paper.pdf").get("Content-Security-Policy")).toContain("frame-ancestors 'self'");
   });
 });

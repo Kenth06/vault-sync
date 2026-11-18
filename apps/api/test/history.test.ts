@@ -112,3 +112,41 @@ describe("device names for a vault member", () => {
     expect(await readErrorCode(after)).toBe("ERR_FORBIDDEN");
   });
 });
+
+describe("raw file ranges", () => {
+  it("serves a byte range with 206 and Content-Range", async () => {
+    const vault = "v-range";
+    const { token } = await enroll(vault);
+    await put(vault, token, { path: "clip.txt", content: "0123456789" });
+    const res = await call(`/v1/vaults/${vault}/raw/clip.txt`, { token, headers: { Range: "bytes=2-5" } });
+    expect(res.status).toBe(206);
+    expect(res.headers.get("Content-Range")).toBe("bytes 2-5/10");
+    expect(await res.text()).toBe("2345");
+
+    const whole = await call(`/v1/vaults/${vault}/raw/clip.txt`, { token });
+    expect(whole.status).toBe(200);
+    expect(whole.headers.get("Accept-Ranges")).toBe("bytes");
+
+    const read = (range: string) => call(`/v1/vaults/${vault}/raw/clip.txt`, { token, headers: { Range: range } });
+    const tail = await read("bytes=-3");
+    expect([tail.status, await tail.text()]).toEqual([206, "789"]);
+    const open = await read("bytes=7-");
+    expect([open.status, open.headers.get("Content-Range"), await open.text()]).toEqual([206, "bytes 7-9/10", "789"]);
+    const beyond = await read("bytes=10-20");
+    expect([beyond.status, beyond.headers.get("Content-Range")]).toEqual([416, "bytes */10"]);
+    const ignored = await Promise.all(
+      ["bytes=0-1,4-5", "lines=1-2", "bytes=5-2"].map(async (range) => {
+        const reply = await read(range);
+        return [reply.status, await reply.text()];
+      }),
+    );
+    expect(ignored).toEqual(Array.from({ length: 3 }, () => [200, "0123456789"]));
+  });
+
+  it("never accepts the viewer cookie in place of a device token", async () => {
+    const vault = "v-cookie";
+    const { token } = await enroll(vault);
+    const res = await call(`/v1/vaults/${vault}/tree`, { headers: { Cookie: `__Host-vault-sync=${token}` } });
+    expect(res.status).toBe(401);
+  });
+});

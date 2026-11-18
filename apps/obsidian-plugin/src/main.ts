@@ -118,7 +118,7 @@ export default class VaultSyncPlugin extends Plugin implements SettingsHost {
   private onReport(report: SyncReport): void {
     this.setStatus(describe(report));
     for (const path of report.conflicts)
-      notify(`Conflict on ${path}: your version was saved as a "(conflicto …)" copy.`);
+      notify(`Conflict on ${path}: your version was saved as a "(conflict …)" copy.`);
   }
 
   private async stillAllowed(): Promise<boolean> {

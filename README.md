@@ -1,145 +1,151 @@
-# vault-sync
+# Vault Sync
 
-Backs up an Obsidian vault to your own Cloudflare account and lets you read it from any browser.
+Back up your Obsidian vault to **your own Cloudflare account**, keep every version of every file, sync it across devices, and read it from any browser.
 
-The PC that holds the vault pushes every change to a Worker. The Worker keeps the bytes in R2 (content-addressed by SHA-256) and the vault index, with the full history of every file, in one SQLite Durable Object per vault. Other devices can pull and edit the same vault; concurrent edits to one note keep both versions.
+[![Deploy to Cloudflare](https://deploy.workers.cloudflare.com/button)](https://deploy.workers.cloudflare.com/?url=https://github.com/Kenth06/vault-sync)
 
-```txt
- Obsidian vault ── CLI daemon or plugin ──▶ API Worker (/v1) ──▶ Durable Object (index, history)
-                                                │            └─▶ R2 (file bytes, snapshots)
- Browser ── viewer Worker (/api, cookie) ───────┘ service binding
-```
+![A note in the viewer: properties, a callout, tags, highlights, tasks and footnotes](docs/images/note-light.png)
 
-## Status
+Your notes never pass through anyone else's servers. One Cloudflare Worker stores the bytes in R2, addressed by their SHA-256, and the vault index with the full history in a SQLite Durable Object. A daemon or the Obsidian plugin pushes every save within seconds; other devices pull it live.
 
-| Phase | Scope                                           | State |
-| ----- | ----------------------------------------------- | ----- |
-| F0    | Monorepo, shared protocol, API skeleton, enroll | done  |
-| F1    | plan → upload → commit, multipart, CLI daemon   | done  |
-| F2    | Snapshots, GC, restore, log, revoke             | done  |
-| F3    | Pull, hibernated WebSocket, conflicts           | done  |
-| —     | Obsidian plugin on a shared sync engine         | done  |
-| —     | Read-only web viewer                            | done  |
+## What you get
 
-## Pieces
+- **Continuous backup** of the whole vault: notes, attachments, settings, `.canvas` boards.
+- **Every version of every file**, who saved it and when, readable in the browser and recoverable from the CLI.
+- **Daily snapshots** of the whole vault, browsable file by file and restorable into a folder.
+- **Sync across devices**, live over a WebSocket. Concurrent offline edits keep both versions.
+- **A read-only web viewer** that renders your vault the way Obsidian does.
+- **One Worker, three Cloudflare primitives** (Workers, Durable Objects, R2). Nothing else to run.
 
-| Path                   | What it is                                                                                        |
-| ---------------------- | ------------------------------------------------------------------------------------------------- |
-| `apps/api`             | The API Worker: Hono, one SQLite Durable Object per vault, R2. Everything else talks to it.       |
-| `apps/cli`             | `vaultsync`, a Node daemon that watches the vault folder and syncs it.                            |
-| `apps/obsidian-plugin` | The same sync inside Obsidian, for devices where a daemon is awkward (a laptop, a second PC).     |
-| `apps/web`             | A read-only viewer: notes, history, snapshots, live updates. Its own Worker, proxying to the API. |
-| `packages/sync-core`   | The sync engine shared by the CLI and the plugin.                                                 |
-| `packages/protocol`    | Zod schemas for every request and response, shared by all of the above.                           |
+## The viewer
 
-## 1. Deploy to your Cloudflare account
+Sign in with your vault id and admin secret from any browser. The viewer renders Obsidian's own syntax and file types:
 
-Needs a Workers Paid plan (see [docs/costs.md](docs/costs.md)) and `pnpm install` at the repo root.
+|                                                                                                   |                                                                              |
+| ------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------- |
+| ![Mermaid diagram, callouts and highlighted code in dark mode](docs/images/diagram-dark.png)      | ![History of a note with an old version open](docs/images/history-light.png) |
+| Mermaid diagrams, callouts and highlighted code                                                   | History of every file, with any old version                                  |
+| ![A JSON Canvas board with groups, colored cards and labeled edges](docs/images/canvas-light.png) | ![KaTeX math, a callout and code in dark mode](docs/images/math-dark.png)    |
+| `.canvas` boards                                                                                  | Math with KaTeX                                                              |
+| ![An embedded PDF](docs/images/pdf-light.png)                                                     | ![An embedded video and GIF in dark mode](docs/images/media-dark.png)        |
+| PDFs                                                                                              | Video, audio and GIFs, with seeking                                          |
+| ![Callouts of every kind, a collapsible one and tags](docs/images/callouts-light.png)             | ![The snapshots list](docs/images/snapshots-light.png)                       |
+| Callouts, tasks, tags, file embeds                                                                | Snapshots                                                                    |
 
-```sh
-cd apps/api
-pnpm exec wrangler r2 bucket create vault-sync
-pnpm exec wrangler secret put ADMIN_SECRET     # a long random string; keep it in your password manager
-pnpm deploy                                    # → https://vault-sync.<your-subdomain>.workers.dev
-cd ../web
-pnpm deploy                                    # → https://vault-sync-web.<your-subdomain>.workers.dev
-```
+<p>
+  <img src="docs/images/mobile-files-dark.png" alt="The file tree and recent changes on a phone, dark mode" width="260">
+  <img src="docs/images/mobile-note-light.png" alt="A recipe note with images and a table on a phone" width="260">
+</p>
 
-Deploy the API before the viewer: the viewer reaches it through a service binding. The admin secret is only used to enroll devices; each device then gets its own token.
+Supported: properties, wikilinks with aliases and `#headings`, `![[embeds]]` with sizes (`|300`), callouts (including collapsible `+`/`-`), `==highlights==`, `#tags`, `%%comments%%`, task lists, tables, footnotes, `$math$`, Mermaid, highlighted code, and PNG, JPG, GIF, WebP, AVIF, SVG, PDF, MP3, WAV, M4A, OGG, MP4, WebM, MOV and `.canvas` files. Anything else can be downloaded.
 
-Set spend limits and alerts once per account: [docs/costs.md](docs/costs.md).
+The viewer is read-only. Its browser session holds a device token in an HttpOnly cookie, and the Worker only forwards read routes and snapshot creation for it. **Sign out of this browser** revokes that device.
 
-## 2. Back up a vault from one PC
+## 1. Deploy
 
-With the CLI (runs in the background, no Obsidian needed):
+**One click:** press **Deploy to Cloudflare** above. Cloudflare copies this repository to your GitHub account, creates the R2 bucket and the Durable Object, asks you for `ADMIN_SECRET`, builds and deploys. Your app lives at `https://vault-sync.<your-subdomain>.workers.dev`.
+
+**From your machine:**
 
 ```sh
-cd apps/cli
-node src/main.ts init "<vault-dir>" --url https://vault-sync.<your-subdomain>.workers.dev --vault-id notes
-node src/main.ts watch "<vault-dir>"
+pnpm install
+pnpm exec wrangler secret put ADMIN_SECRET   # a long random string, e.g. openssl rand -base64 32
+pnpm deploy
 ```
 
-`init` asks for the admin secret once and stores the device token in the OS keychain. `watch` pushes every save within a few seconds and pulls changes from other devices live.
+The admin secret only enrolls devices; each device then gets its own revocable token. Keep it in a password manager.
 
-Or with the Obsidian plugin:
+You need the Workers Paid plan (USD 5/month) for Durable Objects at a useful size. A personal vault costs a few cents a month on top of that; see [docs/costs.md](docs/costs.md) to set spend limits and alerts.
+
+## 2. Back up a vault
+
+**With the Obsidian plugin** (tested on Obsidian desktop; it is not marked desktop-only, but mobile is untested):
 
 ```sh
 pnpm --filter @vault-sync/obsidian-plugin build
 ```
 
-Copy `apps/obsidian-plugin/dist/main.js` and `manifest.json` into `<vault>/.obsidian/plugins/vault-sync/`, enable **Vault Sync** under Settings → Community plugins, enter the Worker URL and the vault id, and press **Connect…**. Requires Obsidian 1.11.4 or later. The token lives in Obsidian's secret storage; the plugin's `data.json` and `state.json` are never synced.
+Copy `apps/obsidian-plugin/dist/main.js` and `apps/obsidian-plugin/manifest.json` into `<vault>/.obsidian/plugins/vault-sync-cloudflare/`, then in Obsidian enable **Vault Sync (Cloudflare)** under Settings → Community plugins, enter your Worker URL and a vault id, and press **Connect…**. The first sync uploads the whole vault. Requires Obsidian 1.11.4 or later.
 
-Under `.obsidian/` only settings (`app.json`, `appearance.json`, `hotkeys.json`, core and community plugin lists), `plugins/` and `snippets/` are synced; workspace layout and caches are not. `.git/` and `.trash/` are skipped too. Add your own gitignore-style rules to `.vaultsyncignore` at the vault root.
+**With the CLI** (a background daemon, no Obsidian needed; Node 24 or later):
 
-## 3. Read the vault in a browser
+```sh
+cd apps/cli
+node src/main.ts init "<vault-dir>" --url https://vault-sync.<your-subdomain>.workers.dev --vault-id my-vault
+node src/main.ts watch "<vault-dir>"
+```
 
-Open the viewer URL, enter the vault id and the admin secret. You get:
+Use one of the two per vault on a given device, not both. Under `.obsidian/` only your settings, `plugins/` and `snippets/` are synced, never workspace layout or caches; `.git/` and `.trash/` are skipped. Add your own gitignore-style rules to `.vaultsyncignore` at the vault root before the first sync.
 
-- the file tree with search, and notes rendered as in Obsidian (wikilinks, embedded images, frontmatter, task lists, tables);
-- **History** on every file: each saved version, which device saved it, and the content of any old version;
-- **Snapshots**: the whole vault as it was each day, browsable file by file, plus **Take snapshot**;
-- live updates: a note edited on the PC refreshes in the open tab.
+## 3. Add another device
 
-The viewer cannot change the vault. It enrolls a device called "Web viewer" whose token stays in an HttpOnly cookie, and its Worker only forwards read routes and snapshot creation. **Sign out of this browser** (the ⋯ menu) revokes that device.
+Install the plugin or run `init` on the other device with the same URL and vault id. It downloads the vault and both stay in sync. If the same note changes on two devices while one is offline, the server version keeps the original name and the other is saved next to it as `<name> (conflict <device> <date>).md`.
 
-## 4. Add another device
+## 4. Recover files
 
-Run `init` with the CLI or **Connect…** in the plugin on the other device, with the same URL and vault id. It downloads the vault, then both stay in sync. If the same note is edited on both while one is offline, the server version keeps the original name and the other is saved next to it as `<name> (conflicto <device> <date>).md`.
-
-## 5. Recover files
-
-| Situation                     | Command                                                                   |
+| Situation                     | How                                                                       |
 | ----------------------------- | ------------------------------------------------------------------------- |
-| An older version of one note  | `log "<path>" --version <seq> --out <file>`, or **History** in the viewer |
-| The whole vault at a snapshot | `restore <empty-dir> --url <api-url> --vault-id <id> --snapshot <seq>`    |
-| The whole vault at any change | `restore <empty-dir> --url <api-url> --vault-id <id> --at <seq>`          |
+| An older version of one note  | **History** in the viewer, or `log "<path>" --version <seq> --out <file>` |
+| The whole vault at a snapshot | `restore <empty-dir> --url <worker-url> --vault-id <id> --snapshot <seq>` |
+| The whole vault at any change | `restore <empty-dir> --url <worker-url> --vault-id <id> --at <seq>`       |
 
-`restore` writes into an empty directory and keeps the original modification times. The server keeps the last 30 daily snapshots and one per month for 12 months; file contents that no snapshot or recent history entry needs are deleted after a week.
+`restore` writes into an empty folder and keeps the original modification times. The server keeps 30 daily and 12 monthly snapshots; file contents that no snapshot or recent history needs are deleted after a week.
 
 ## CLI reference
 
-Run from `apps/cli` as `node src/main.ts <command>`. `[dir]` defaults to the current directory.
+Run from `apps/cli` as `node src/main.ts <command>`. `[dir]` defaults to the current directory. `VAULTSYNC_ADMIN_SECRET` skips the admin secret prompt.
 
-| Command                                      | What it does                                                                |
-| -------------------------------------------- | --------------------------------------------------------------------------- |
-| `init <dir> --url <api-url> --vault-id <id>` | Enroll this device and link a vault (asks for the admin secret)             |
-| `watch [dir]`                                | Sync continuously; live updates from other devices                          |
-| `sync [dir]`                                 | Pull remote changes, then push local ones, once                             |
-| `push [dir]` / `pull [dir]`                  | One direction only                                                          |
-| `status [dir]`                               | Local and remote cursor, last sync, last error                              |
-| `log <path> [dir]`                           | Versions of a file; `--version <seq> [--out <file>]` recovers one           |
-| `snapshots [dir]`                            | List snapshots; `--create` takes one now                                    |
-| `restore <dir> --url --vault-id`             | Rebuild a vault into an empty directory; `--at <seq>` or `--snapshot <seq>` |
-| `devices [dir]`                              | List the vault's devices (asks for the admin secret)                        |
-| `revoke <deviceId> [dir]`                    | Revoke a device immediately (asks for the admin secret)                     |
+| Command                                     | What it does                                                             |
+| ------------------------------------------- | ------------------------------------------------------------------------ |
+| `init <dir> --url <url> --vault-id <id>`    | Enroll this device and link a vault; `--name` sets the device name       |
+| `watch [dir]`                               | Sync continuously, with live updates from other devices                  |
+| `sync [dir]`                                | Pull remote changes, then push local ones, once                          |
+| `push [dir]` / `pull [dir]`                 | One direction only                                                       |
+| `status [dir]`                              | Local and remote cursor, last sync, last error                           |
+| `log <path> [dir]`                          | Versions of a file; `--version <seq> [--out <file>]` recovers one        |
+| `snapshots [dir]`                           | List snapshots; `--create` takes one now                                 |
+| `restore <dir> --url --vault-id`            | Rebuild a vault into an empty folder; `--at <seq>` or `--snapshot <seq>` |
+| `devices [dir]` / `revoke <deviceId> [dir]` | List the vault's devices / revoke one immediately (admin secret)         |
 
-`VAULTSYNC_ADMIN_SECRET` skips the admin secret prompt.
+## How it works
 
-## Security
+```txt
+ Obsidian plugin / CLI ──▶ /v1  ┐
+                                ├─ one Worker ──▶ Durable Object per vault (index, history, devices)
+ Browser (viewer) ─────▶ /api  ┘              └─▶ R2 (file bytes by SHA-256, snapshots)
+```
 
-- Device tokens are 256-bit, stored only as SHA-256 on the server, and revocable one by one; a revoked device is disconnected at once.
-- The admin secret only enrolls, lists and revokes devices. Nothing stores it.
-- Paths are normalized and checked on both sides; nothing outside the vault folder is read or written.
-- The viewer serves vault files with a sandbox CSP and `nosniff`, sanitizes rendered Markdown, and keeps its token out of reach of page scripts.
+A sync asks the Worker which file hashes it is missing, uploads only those to R2, then commits the batch atomically; a commit is rejected if the server changed a file since the device last saw it. Renaming a folder uploads nothing. Live updates use hibernatable WebSockets, so an idle connection costs nothing.
 
-Details and the reasons behind them: [docs/decisions.md](docs/decisions.md).
+| Path                   | What it is                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------ |
+| `apps/api`             | The device API: Hono, one SQLite Durable Object per vault, R2                  |
+| `apps/web`             | The viewer (React, Vite, Kumo) and the Worker entry that serves API and viewer |
+| `apps/cli`             | The `vaultsync` daemon                                                         |
+| `apps/obsidian-plugin` | The Obsidian plugin                                                            |
+| `packages/sync-core`   | The sync engine shared by the CLI and the plugin                               |
+| `packages/protocol`    | Zod schemas for every request and response                                     |
 
-## Local development
+Design records: [docs/decisions.md](docs/decisions.md). Security model and how to report a vulnerability: [SECURITY.md](SECURITY.md).
+
+## Development
 
 ```sh
 pnpm install
-cp apps/api/.dev.vars.example apps/api/.dev.vars   # set ADMIN_SECRET
-pnpm --filter @vault-sync/api dev                  # API on :8787
-pnpm --filter @vault-sync/web build
-pnpm --filter @vault-sync/web exec wrangler dev --port 8788   # viewer on :8788
+cp .dev.vars.example .dev.vars   # set ADMIN_SECRET
+pnpm dev:worker                  # the whole app on http://127.0.0.1:8787
 ```
 
 Point the CLI or the plugin at `http://127.0.0.1:8787`.
 
 ```sh
-pnpm format   # oxfmt
 pnpm verify   # format check, type-aware oxlint, zero comments, types, tests
+pnpm format   # oxfmt
 pnpm knip     # unused code
 ```
 
-Structure, conventions and the deviations from the house standard: [AGENTS.md](AGENTS.md). Costs: [docs/costs.md](docs/costs.md).
+Conventions for contributors and coding agents: [AGENTS.md](AGENTS.md).
+
+## License
+
+[MIT](LICENSE)

@@ -17,7 +17,7 @@ export function describeReport(report: SyncReport): string {
 export function printConflicts(report: SyncReport): void {
   for (const path of report.failed) console.error(`Could not pull ${path}; it will be retried on the next sync.`);
   for (const path of report.conflicts) {
-    console.warn(`Conflict on ${path}: kept the server version, saved yours as a "(conflicto ...)" copy next to it.`);
+    console.warn(`Conflict on ${path}: kept the server version, saved yours as a "(conflict ...)" copy next to it.`);
   }
 }
 

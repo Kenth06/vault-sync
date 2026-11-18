@@ -2,7 +2,7 @@ import { EnrollResponse, parseData, ErrorBody, PutChange, type ErrorCode } from 
 import { exports } from "cloudflare:workers";
 import type { z } from "zod";
 
-export const ADMIN = "test-admin-secret";
+export const ADMIN = "test-admin-secret-with-at-least-32-characters";
 const BASE = "https://vault-sync.test";
 
 export function call(path: string, init: RequestInit & { token?: string } = {}): Promise<Response> {

@@ -71,7 +71,7 @@ describe("planPull", () => {
 describe("conflictName", () => {
   it("keeps folder and extension and adds device and time", () => {
     const date = new Date(2026, 10, 17, 9, 5);
-    expect(conflictName("Notas/plan.md", "laptop", date)).toBe("Notas/plan (conflicto laptop 2026-11-17 0905).md");
-    expect(conflictName("todo", "a:b", date)).toBe("todo (conflicto a-b 2026-11-17 0905)");
+    expect(conflictName("Notes/plan.md", "laptop", date)).toBe("Notes/plan (conflict laptop 2026-11-17 0905).md");
+    expect(conflictName("todo", "a:b", date)).toBe("todo (conflict a-b 2026-11-17 0905)");
   });
 });

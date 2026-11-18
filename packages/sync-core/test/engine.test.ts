@@ -40,7 +40,7 @@ describe("sync engine", () => {
     expect(reportB.conflicts).toEqual(["plan.md"]);
     for (const d of [a, b]) {
       expect(d.files.text("plan.md")).toBe("edit from A");
-      expect(d.files.text(`plan (conflicto ${DEVICE_B} 2026-11-17 0905).md`)).toBe("edit from B");
+      expect(d.files.text(`plan (conflict ${DEVICE_B} 2026-11-17 0905).md`)).toBe("edit from B");
     }
   });
 
@@ -79,7 +79,7 @@ describe("sync engine", () => {
     await pullOnce(b.env);
 
     expect(b.files.text("n.md")).toBe("v2");
-    expect(b.files.text(`n (conflicto ${DEVICE_B} 2026-11-17 0905).md`)).toBe("typed meanwhile");
+    expect(b.files.text(`n (conflict ${DEVICE_B} 2026-11-17 0905).md`)).toBe("typed meanwhile");
   });
 
   it("applies a case-only rename on case-insensitive filesystems without losing the file", async () => {
@@ -101,7 +101,7 @@ describe("sync engine", () => {
     const server = new FakeServer();
     const a = device(server, DEVICE_A, { isIgnored: () => false });
     const b = device(server, DEVICE_B);
-    a.files.put(".obsidian/plugins/vault-sync/data.json", '{"token":"secret"}');
+    a.files.put(".obsidian/plugins/vault-sync-cloudflare/data.json", '{"token":"secret"}');
     a.files.put(".obsidian/workspace.json", "{}");
     a.files.put("note.md", "hi");
     await syncOnce(a.env);

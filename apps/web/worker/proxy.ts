@@ -5,7 +5,15 @@ import { fileHeaders, jsonHeaders } from "./content-type.ts";
 import { upstreamPath } from "./routes.ts";
 import { errorJson, forgetSession, readSession, type Session, type WebEnv } from "./session.ts";
 
-const FORWARDED = ["Accept", "Content-Type", "If-None-Match", "Sec-WebSocket-Key", "Sec-WebSocket-Version", "Upgrade"];
+const FORWARDED = [
+  "Accept",
+  "Content-Type",
+  "If-None-Match",
+  "Range",
+  "Sec-WebSocket-Key",
+  "Sec-WebSocket-Version",
+  "Upgrade",
+];
 
 function isUpgrade(request: Request): boolean {
   return request.headers.get("Upgrade") === "websocket";
@@ -48,16 +56,21 @@ export async function proxy(c: Context<WebEnv>): Promise<Response> {
   if (path === null) return errorJson(c, 404, { error: "no such route", code: "ERR_NOT_FOUND" });
   if (foreignUpgrade(c.req.raw, url)) return errorJson(c, 403, { error: "cross-origin socket", code: "ERR_FORBIDDEN" });
 
-  const upstream = await c.env.API.fetch(`https://api${path}${url.search}`, {
-    method: c.req.method,
-    headers: upstreamHeaders(c.req.raw, session),
-  });
+  const upstream = await c.var.callApi(
+    new Request(`https://vault-sync.internal${path}${url.search}`, {
+      method: c.req.method,
+      headers: upstreamHeaders(c.req.raw, session),
+    }),
+  );
   return upstream.status === 101 ? upstream : respond(c, upstream, fileName(path, url));
 }
 
 function respond(c: Context<WebEnv>, upstream: Response, name: string | null): Response {
   if (upstream.status === 401 || upstream.status === 403) forgetSession(c);
-  const headers = name !== null && upstream.ok ? fileHeaders(upstream.headers, name) : jsonHeaders(upstream.headers);
+  const headers =
+    name !== null && upstream.ok
+      ? fileHeaders(upstream.headers, name, c.req.header("Sec-Fetch-Dest") ?? null)
+      : jsonHeaders(upstream.headers);
   for (const [key, value] of c.res.headers) if (key === "set-cookie") headers.append(key, value);
   return new Response(upstream.body, { status: upstream.status, headers });
 }

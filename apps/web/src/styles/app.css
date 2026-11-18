@@ -210,6 +210,230 @@ dd {
   }
 }
 
+.prose-note {
+  & mark {
+    background: oklch(0.9 0.12 95 / 0.55);
+    color: inherit;
+    border-radius: 3px;
+    padding: 0 0.15em;
+  }
+  & .tag {
+    display: inline-block;
+    background: var(--app-accent-soft);
+    color: var(--app-accent-fg);
+    border-radius: 999px;
+    padding: 0 0.55em;
+    font-size: 0.875em;
+    line-height: 1.6;
+  }
+  & audio,
+  & video,
+  & .pdf-embed {
+    display: block;
+    width: 100%;
+    border-radius: 8px;
+  }
+  & video {
+    background: black;
+  }
+  & .pdf-embed {
+    height: 70dvh;
+    outline: 1px solid var(--app-outline);
+    outline-offset: -1px;
+  }
+  & .embed-link {
+    display: flex;
+    align-items: center;
+    gap: 0.5em;
+    border: 1px solid var(--app-line);
+    border-radius: 8px;
+    padding: 0.75em 1em;
+    text-decoration: none;
+    font-weight: 550;
+  }
+  & .embed-link:hover {
+    background: var(--app-hover);
+  }
+  & .embed-link::before {
+    content: "↳";
+    color: var(--app-fg-soft);
+  }
+  & .math-block {
+    overflow-x: auto;
+    text-align: center;
+    padding-block: 0.25em;
+  }
+  & .mermaid-block {
+    display: flex;
+    justify-content: center;
+    overflow-x: auto;
+    font-family: var(--font-mono);
+    font-size: 0.8125rem;
+    white-space: pre;
+  }
+  & .mermaid-rendered {
+    font-family: inherit;
+    white-space: normal;
+  }
+  & .mermaid-rendered svg {
+    max-width: 100%;
+    height: auto;
+  }
+  & .footnotes {
+    margin-top: 2.5em;
+    border-top: 1px solid var(--app-line);
+    padding-top: 1em;
+    font-size: 0.875rem;
+    color: var(--app-fg-soft);
+  }
+  & .footnotes h2 {
+    font-size: 0.875rem;
+    margin-top: 0;
+  }
+  & sup a {
+    text-decoration: none;
+  }
+}
+
+.callout {
+  --callout: oklch(0.6 0.12 245);
+  border-left: 3px solid var(--callout);
+  background: color-mix(in oklch, var(--callout) 9%, transparent);
+  border-radius: 6px;
+  padding: 0.75em 1em;
+
+  & > .callout-title {
+    color: color-mix(in oklch, var(--callout) 75%, var(--app-fg));
+    font-weight: 620;
+    margin: 0;
+  }
+  & > summary.callout-title {
+    cursor: pointer;
+  }
+  & > .callout-content > :first-child {
+    margin-top: 0.4em;
+  }
+  & > .callout-content > * + * {
+    margin-top: 0.75em;
+  }
+}
+
+.callout:is(
+  [data-callout="tip"],
+  [data-callout="hint"],
+  [data-callout="important"],
+  [data-callout="success"],
+  [data-callout="check"],
+  [data-callout="done"]
+) {
+  --callout: oklch(0.6 0.12 160);
+}
+.callout:is(
+  [data-callout="question"],
+  [data-callout="help"],
+  [data-callout="faq"],
+  [data-callout="warning"],
+  [data-callout="caution"],
+  [data-callout="attention"]
+) {
+  --callout: oklch(0.72 0.14 70);
+}
+.callout:is(
+  [data-callout="failure"],
+  [data-callout="fail"],
+  [data-callout="missing"],
+  [data-callout="danger"],
+  [data-callout="error"],
+  [data-callout="bug"]
+) {
+  --callout: oklch(0.6 0.17 25);
+}
+.callout:is([data-callout="example"], [data-callout="quote"], [data-callout="cite"]) {
+  --callout: oklch(0.55 0.02 110);
+}
+
+.canvas-text {
+  font-size: 0.875rem;
+  line-height: 1.5;
+
+  & > :first-child {
+    margin-top: 0;
+  }
+  & h1,
+  & h2,
+  & h3 {
+    font-size: 1rem;
+    margin-top: 0.75em;
+  }
+  & li + li {
+    margin-top: 0.1em;
+  }
+}
+
+.prose-note li:has(> input[type="checkbox"]) {
+  list-style: none;
+  margin-left: -1.4em;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--app-fg-soft);
+  font-style: italic;
+}
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-built_in,
+.hljs-type {
+  color: oklch(0.5 0.13 300);
+}
+.hljs-string,
+.hljs-regexp,
+.hljs-addition,
+.hljs-attribute {
+  color: oklch(0.5 0.11 150);
+}
+.hljs-number,
+.hljs-literal,
+.hljs-symbol {
+  color: oklch(0.55 0.13 50);
+}
+.hljs-title,
+.hljs-section,
+.hljs-name {
+  color: oklch(0.5 0.12 245);
+}
+.hljs-deletion {
+  color: oklch(0.55 0.17 25);
+}
+
+[data-mode="dark"] {
+  & .hljs-keyword,
+  & .hljs-selector-tag,
+  & .hljs-built_in,
+  & .hljs-type {
+    color: oklch(0.78 0.11 300);
+  }
+  & .hljs-string,
+  & .hljs-regexp,
+  & .hljs-addition,
+  & .hljs-attribute {
+    color: oklch(0.8 0.11 150);
+  }
+  & .hljs-number,
+  & .hljs-literal,
+  & .hljs-symbol {
+    color: oklch(0.8 0.11 60);
+  }
+  & .hljs-title,
+  & .hljs-section,
+  & .hljs-name {
+    color: oklch(0.8 0.09 245);
+  }
+  & .prose-note mark {
+    background: oklch(0.55 0.1 95 / 0.45);
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,

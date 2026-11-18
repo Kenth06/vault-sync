@@ -137,7 +137,7 @@ describe("pullOnce", () => {
       await writeFile(path.join(fixture.root, "a.md"), "typed during pull");
     });
     await pullOnce(environment(client));
-    const copies = (await files()).filter((f) => f.includes("conflicto"));
+    const copies = (await files()).filter((f) => f.includes("conflict"));
     expect(await read("a.md")).toBe("remote");
     expect(await Promise.all(copies.map(read))).toEqual(["typed during pull"]);
   });
@@ -163,7 +163,7 @@ describe("pullOnce", () => {
     await pullOnce(environment(fakeClient([put(1, "a.md", "theirs one")], ["theirs one"])));
     await writeFile(path.join(fixture.root, "a.md"), "mine two");
     await pullOnce(environment(fakeClient([put(2, "a.md", "theirs two")], ["theirs two"])));
-    const copies = (await files()).filter((f) => f.includes("conflicto"));
+    const copies = (await files()).filter((f) => f.includes("conflict"));
     expect(copies).toHaveLength(2);
     expect(new Set(await Promise.all(copies.map(read)))).toEqual(new Set(["mine one", "mine two"]));
   });
@@ -174,7 +174,7 @@ describe("pullOnce", () => {
     const own = put(1, "a.md", "pushed", fixture.ctx.config.deviceId);
     await pullOnce(environment(fakeClient([own], ["pushed"])));
     expect(await read("a.md")).toBe("edited again");
-    expect((await files()).some((f) => f.includes("conflicto"))).toBe(false);
+    expect((await files()).some((f) => f.includes("conflict"))).toBe(false);
   });
 
   it("applies a case-only rename without losing the file", async () => {

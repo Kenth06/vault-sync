@@ -1,54 +1,16 @@
 import DOMPurify from "dompurify";
+import GithubSlugger from "github-slugger";
 import { Marked, type MarkedExtension, type Token } from "marked";
+import markedFootnote from "marked-footnote";
 
-import { extensionOf } from "../file-kind.ts";
-import { isExternal, parseWikilink, type LinkIndex, type Wikilink } from "./links.ts";
+import { escapeHtml, type LinkContext } from "./embed.ts";
+import { pdfFrameSource } from "./frame.ts";
+import { isExternal } from "./links.ts";
+import { obsidianSyntax } from "./obsidian.ts";
 
-export interface RenderContext {
-  readonly index: LinkIndex;
-  readonly from: string;
-  readonly noteHref: (vaultPath: string) => string;
-  readonly fileUrl: (vaultPath: string) => string;
-}
+export type RenderContext = LinkContext;
 
-const IMAGE_EXTENSIONS = new Set(["png", "jpg", "jpeg", "gif", "webp", "avif", "svg"]);
-
-function escapeHtml(text: string): string {
-  return text.replaceAll("&", "&amp;").replaceAll("<", "&lt;").replaceAll(">", "&gt;").replaceAll('"', "&quot;");
-}
-
-function renderWikilink(link: Wikilink, ctx: RenderContext): string {
-  const resolved = ctx.index.resolve(link.target, ctx.from);
-  const label = escapeHtml(link.label);
-  if (resolved === null) return `<a data-missing title="Not in this vault">${label}</a>`;
-  if (link.embed && IMAGE_EXTENSIONS.has(extensionOf(resolved))) {
-    return `<img src="${escapeHtml(ctx.fileUrl(resolved))}" alt="${label}" loading="lazy">`;
-  }
-  return `<a href="${escapeHtml(ctx.noteHref(resolved))}">${label}</a>`;
-}
-
-function wikilinks(ctx: RenderContext): MarkedExtension {
-  return {
-    extensions: [
-      {
-        name: "wikilink",
-        level: "inline",
-        start: (src) => /!?\[\[/u.exec(src)?.index,
-        tokenizer: (src) => {
-          const link = parseWikilink(src);
-          const raw = /^!?\[\[[^\]\n]+\]\]/u.exec(src)?.[0];
-          return link === null || raw === undefined ? undefined : { type: "wikilink", raw };
-        },
-        renderer: (token) => {
-          const raw: unknown = token.raw;
-          if (typeof raw !== "string") return false;
-          const link = parseWikilink(raw);
-          return link === null ? escapeHtml(raw) : renderWikilink(link, ctx);
-        },
-      },
-    ],
-  };
-}
+const USER_PREFIX = "user-content-";
 
 function resolveHref(href: string, image: boolean, ctx: RenderContext): string | null {
   const [target = "", fragment] = href.split("#", 2);
@@ -69,23 +31,57 @@ function relativeLinks(ctx: RenderContext): MarkedExtension {
   };
 }
 
+function blocks(): MarkedExtension {
+  const slugger = new GithubSlugger();
+  return {
+    renderer: {
+      heading({ tokens, depth, text }) {
+        return `<h${depth} id="${slugger.slug(text)}">${this.parser.parseInline(tokens)}</h${depth}>\n`;
+      },
+      code({ text, lang }) {
+        const language = (lang ?? "").split(/\s/u, 1)[0] ?? "";
+        if (language === "mermaid") return `<div class="mermaid-block">${escapeHtml(text)}</div>\n`;
+        const className = language === "" ? "" : ` class="language-${escapeHtml(language)}"`;
+        return `<pre><code${className}>${escapeHtml(text)}</code></pre>\n`;
+      },
+    },
+  };
+}
+
 export function isInternalHref(href: string): boolean {
   return href.startsWith("/") && !href.startsWith("//") && !href.startsWith("/\\");
 }
 
+DOMPurify.addHook("uponSanitizeElement", (node, data) => {
+  if (data.tagName !== "iframe" || !(node instanceof Element)) return;
+  const safe = pdfFrameSource(node.getAttribute("src") ?? "", location.origin);
+  if (safe === null) node.remove();
+  else node.setAttribute("src", safe);
+});
+
 DOMPurify.addHook("afterSanitizeAttributes", (node) => {
   if (!(node instanceof HTMLAnchorElement)) return;
   const href = node.getAttribute("href") ?? "";
-  if (isInternalHref(href)) return;
+  if (href.startsWith("#") && !href.startsWith(`#${USER_PREFIX}`) && href.length > 1) {
+    node.setAttribute("href", `#${USER_PREFIX}${href.slice(1)}`);
+  }
+  if (href === "" || href.startsWith("#") || isInternalHref(href)) return;
   node.setAttribute("target", "_blank");
   node.setAttribute("rel", "noopener noreferrer");
 });
 
 export function renderMarkdown(text: string, ctx: RenderContext): string {
-  const marked = new Marked({ gfm: true, async: false }, wikilinks(ctx), relativeLinks(ctx));
+  const marked = new Marked(
+    { gfm: true, async: false },
+    blocks(),
+    obsidianSyntax(ctx),
+    markedFootnote({ description: "Footnotes" }),
+    relativeLinks(ctx),
+  );
   const html = marked.parse(text, { async: false });
   return DOMPurify.sanitize(html, {
-    FORBID_TAGS: ["style", "form", "iframe"],
+    ADD_TAGS: ["iframe"],
+    FORBID_TAGS: ["style", "form"],
     FORBID_ATTR: ["style"],
     SANITIZE_NAMED_PROPS: true,
   });
